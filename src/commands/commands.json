@@ -1,0 +1,236 @@
+{
+  "commands": [
+    {
+      "commandName": "backoffice:setup",
+      "description": "Create backoffice schema in database",
+      "help": "",
+      "namespace": "backoffice",
+      "aliases": [],
+      "flags": [],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "setup_backoffice.js"
+    },
+    {
+      "commandName": "tenant:list",
+      "description": "List all tenants with their current status",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "all", "flagName": "all", "required": false, "type": "boolean", "description": "Include soft-deleted tenants" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "list_tenants.js"
+    },
+    {
+      "commandName": "tenant:create",
+      "description": "Create a new tenant and queue schema provisioning",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [],
+      "args": [
+        { "name": "name", "argumentName": "name", "required": true, "description": "Tenant name", "type": "string" },
+        { "name": "email", "argumentName": "email", "required": true, "description": "Tenant contact email", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "create_tenant.js"
+    },
+    {
+      "commandName": "tenant:activate",
+      "description": "Activate a suspended or failed tenant",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [],
+      "args": [
+        { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID to activate", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "activate_tenant.js"
+    },
+    {
+      "commandName": "tenant:suspend",
+      "description": "Suspend a tenant (blocks all API access)",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [],
+      "args": [
+        { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID to suspend", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "suspend_tenant.js"
+    },
+    {
+      "commandName": "tenant:destroy",
+      "description": "Soft-delete a tenant and tear down its schema",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "force", "flagName": "force", "required": false, "type": "boolean", "alias": "y", "description": "Skip confirmation prompt" }
+      ],
+      "args": [
+        { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID to destroy", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "destroy_tenant.js"
+    },
+    {
+      "commandName": "migration:tenant:run",
+      "description": "Migrate the tenant schema",
+      "help": "",
+      "namespace": "migration",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantsIds", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant(s) id(s) to migrate" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "View SQL without running" },
+        { "name": "disableLocks", "flagName": "disable-locks", "required": false, "type": "boolean", "description": "Disable migration locks" },
+        { "name": "verbose", "flagName": "verbose", "required": false, "type": "boolean", "description": "Verbose output" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "run_tenant_migrations.js"
+    },
+    {
+      "commandName": "migration:tenant:rollback",
+      "description": "Rollback the last tenant migration",
+      "help": "",
+      "namespace": "migration",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantsIds", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant(s) id(s) to rollback" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "View SQL without running" },
+        { "name": "disableLocks", "flagName": "disable-locks", "required": false, "type": "boolean", "description": "Disable migration locks" },
+        { "name": "verbose", "flagName": "verbose", "required": false, "type": "boolean", "description": "Verbose output" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "rollback_tenant_migrations.js"
+    },
+    {
+      "commandName": "tenant:migrate",
+      "description": "Run migrations for one or all tenant schemas (alias for migration:tenant:run)",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantsIds", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant ID(s) to migrate" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "Print SQL without executing" },
+        { "name": "disableLocks", "flagName": "disable-locks", "required": false, "type": "boolean", "description": "Disable migration locks" },
+        { "name": "verbose", "flagName": "verbose", "required": false, "type": "boolean", "description": "Verbose output" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_migrate.js"
+    },
+    {
+      "commandName": "tenant:migrate:rollback",
+      "description": "Rollback last migration for one or all tenant schemas",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantsIds", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant ID(s) to rollback" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "Print SQL without executing" },
+        { "name": "disableLocks", "flagName": "disable-locks", "required": false, "type": "boolean", "description": "Disable migration locks" },
+        { "name": "verbose", "flagName": "verbose", "required": false, "type": "boolean", "description": "Verbose output" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_migrate_rollback.js"
+    },
+    {
+      "commandName": "tenant:queue:stats",
+      "description": "Show BullMQ queue statistics for one or all tenant queues",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenant", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Filter by tenant ID(s)" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_queue_stats.js"
+    },
+    {
+      "commandName": "tenant:backup",
+      "description": "Backup one or all active tenants synchronously",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenant", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant ID(s) to back up" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_backup.js"
+    },
+    {
+      "commandName": "tenant:backup:list",
+      "description": "List available backups for one or all tenants",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantId", "flagName": "tenant", "required": false, "type": "string", "alias": "t", "description": "Filter by tenant ID" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_backup_list.js"
+    },
+    {
+      "commandName": "tenant:restore",
+      "description": "Restore a tenant schema from a backup file",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantId", "flagName": "tenant", "required": true, "type": "string", "alias": "t", "description": "Tenant ID" },
+        { "name": "file", "flagName": "file", "required": true, "type": "string", "description": "Backup file name" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_restore.js"
+    },
+    {
+      "commandName": "tenant:import",
+      "description": "Import a PostgreSQL .sql dump file into a tenant schema",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenant", "flagName": "tenant", "required": true, "type": "string", "alias": "t", "description": "Target tenant ID" },
+        { "name": "file", "flagName": "file", "required": true, "type": "string", "alias": "f", "description": "Path to the .sql dump file" },
+        { "name": "schemaReplace", "flagName": "schema-replace", "required": false, "type": "string", "description": "Source schema name in the dump to rewrite" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "Parse file and report counts without executing" },
+        { "name": "verbose", "flagName": "verbose", "required": false, "type": "boolean", "description": "Print each failed statement" },
+        { "name": "force", "flagName": "force", "required": false, "type": "boolean", "description": "Allow import into non-active tenants" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "import_tenant_sql.js"
+    },
+    {
+      "commandName": "tenant:clone",
+      "description": "Clone a tenant: provision a new schema and optionally copy all row data from the source",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "source", "flagName": "source", "required": true, "type": "string", "alias": "s", "description": "Source tenant ID to clone from" },
+        { "name": "name", "flagName": "name", "required": true, "type": "string", "alias": "n", "description": "Name for the new tenant" },
+        { "name": "email", "flagName": "email", "required": true, "type": "string", "alias": "e", "description": "Email for the new tenant" },
+        { "name": "schemaOnly", "flagName": "schema-only", "required": false, "type": "boolean", "description": "Clone schema structure only" },
+        { "name": "clearSessions", "flagName": "clear-sessions", "required": false, "type": "boolean", "description": "Wipe access_tokens in destination after copy" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_clone.js"
+    }
+  ],
+  "version": 1
+}

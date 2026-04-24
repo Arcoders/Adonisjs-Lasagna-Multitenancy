@@ -1,0 +1,65 @@
+{{{
+  exports({ to: app.configPath('multitenancy.ts') })
+}}}
+import env from '#start/env'
+import type { TenantResolverStrategy } from '@adonisjs-lasagna/multitenancy/types'
+
+export default {
+  backofficeSchemaName: 'backoffice',
+  backofficeConnectionName: 'backoffice',
+  centralSchemaName: 'public',
+  centralConnectionName: 'public',
+  tenantConnectionNamePrefix: 'tenant_',
+  tenantSchemaPrefix: env.get('TENANT_SCHEMA_PREFIX', 'tenant_'),
+
+  // Strategy: 'header' | 'subdomain' | 'path'
+  resolverStrategy: env.get('TENANT_RESOLVER', 'header') as TenantResolverStrategy,
+  tenantHeaderKey: env.get('TENANT_HEADER_KEY', 'x-tenant-id'),
+  baseDomain: env.get('APP_DOMAIN', 'localhost'),
+
+  schemaCacheTtl: 300,
+  ignorePaths: ['/admin', '/api/webhooks', '/health'],
+
+  maintenanceSchedule: {
+    backupHour: 2,
+    migrateAllHour: 3,
+  },
+
+  circuitBreaker: {
+    threshold: 50,
+    resetTimeout: 30_000,
+    rollingCountTimeout: 10_000,
+    volumeThreshold: 2,
+  },
+
+  queue: {
+    tenantQueuePrefix: 'tenant_queue_',
+    defaultConcurrency: 1,
+    attempts: 3,
+    redis: {
+      host: env.get('QUEUE_REDIS_HOST', '127.0.0.1'),
+      port: env.get('QUEUE_REDIS_PORT', 6379),
+      db: env.get('QUEUE_REDIS_DB', 1),
+    },
+  },
+
+  backup: {
+    storagePath: env.get('BACKUP_STORAGE_PATH', './storage/backups'),
+    metadataTtl: 60 * 60 * 24 * 30,
+    pgConnection: {
+      host: env.get('DB_HOST', '127.0.0.1'),
+      port: env.get('DB_PORT', 5432),
+      user: env.get('DB_USER', 'postgres'),
+      password: env.get('DB_PASSWORD', ''),
+      database: env.get('DB_DATABASE', 'postgres'),
+    },
+    s3: {
+      enabled: false,
+      bucket: '',
+      region: 'us-east-1',
+      endpoint: '',
+      accessKeyId: '',
+      secretAccessKey: '',
+    },
+  },
+}
