@@ -1,4 +1,5 @@
 import { getConfig } from '../config.js'
+import { resolveTenantId } from '../extensions/request.js'
 import { Exception } from '@adonisjs/core/exceptions'
 import app from '@adonisjs/core/services/app'
 import type { HttpContext } from '@adonisjs/core/http'
@@ -22,7 +23,7 @@ export default class RateLimitMiddleware {
     const { limit, windowSeconds, prefix = 'rl' } = options
 
     const ip = request.ip()
-    const tenantId = request.header(getConfig().tenantHeaderKey) ?? 'global'
+    const tenantId = resolveTenantId(request) ?? 'global'
     const key = `${prefix}:${tenantId}:${ip}`
 
     const now = Date.now()

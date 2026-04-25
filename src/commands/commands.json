@@ -232,5 +232,30 @@
       "filePath": "tenant_clone.js"
     }
   ],
+    {
+      "commandName": "tenant:webhooks:retry",
+      "description": "Process pending webhook retries for all tenants",
+      "help": "Run this every minute via cron: * * * * * node ace tenant:webhooks:retry",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_webhooks_retry.js"
+    },
+    {
+      "commandName": "tenant:metrics:flush",
+      "description": "Flush Redis metric counters to the database for all tenants",
+      "help": "Run daily via cron: 0 1 * * * node ace tenant:metrics:flush",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [],
+      "args": [
+        { "name": "period", "argumentName": "period", "required": false, "description": "Period to flush (YYYY-MM-DD). Defaults to today (UTC)", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "tenant_metrics_flush.js"
+    }
+  ],
   "version": 1
 }

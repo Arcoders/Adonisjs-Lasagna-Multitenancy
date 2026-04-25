@@ -4,7 +4,7 @@ import { redisDriver, redisBusDriver } from 'bentocache/drivers/redis'
 import { getConfig } from '../config.js'
 
 function buildCache() {
-  const { host, port, username, password, db } = getConfig().queue.redis
+  const { host, port, username, password, db } = getConfig().cache.redis
   const connection = {
     host,
     port,

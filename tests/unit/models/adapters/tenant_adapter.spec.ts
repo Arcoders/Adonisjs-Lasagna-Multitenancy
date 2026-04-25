@@ -1,0 +1,198 @@
+import { test } from '@japa/runner'
+import { HttpContext } from '@adonisjs/core/http'
+import TenantAdapter from '../../../../src/models/adapters/tenant_adapter.js'
+import MissingTenantHeaderException from '../../../../src/exceptions/missing_tenant_header_exception.js'
+import { setConfig } from '../../../../src/config.js'
+import { testConfig } from '../../../helpers/config.js'
+
+// Valid v4 UUIDs for use in tests
+const UUID1 = '11111111-1111-4111-8111-111111111111'
+const UUID2 = '22222222-2222-4222-8222-222222222222'
+const UUID3 = '33333333-3333-4333-8333-333333333333'
+
+function makeRequest(opts: { headers?: Record<string, string>; url?: string } = {}) {
+  const headers: Record<string, string> = {}
+  for (const [k, v] of Object.entries(opts.headers ?? {})) {
+    headers[k.toLowerCase()] = v
+  }
+  return {
+    hostname: () => (headers['host'] ?? '').split(':')[0],
+    url: () => (opts.url ?? '/').split('?')[0],
+    header: (key: string) => headers[key.toLowerCase()] ?? null,
+  }
+}
+
+function makeMockDb() {
+  const calls: string[] = []
+  const db = {
+    connection: (name?: string) => {
+      calls.push(name ?? '__undefined__')
+      return `client:${String(name)}`
+    },
+    get lastCall() {
+      return calls[calls.length - 1]
+    },
+    calls,
+  }
+  return db
+}
+
+test.group('TenantAdapter — modelConstructorClient', (group) => {
+  let originalGet: typeof HttpContext.get
+
+  group.each.setup(() => {
+    setConfig({ ...testConfig, resolverStrategy: 'header' })
+    originalGet = HttpContext.get
+    ;(HttpContext as any).get = () => null
+  })
+
+  group.each.teardown(() => {
+    ;(HttpContext as any).get = originalGet
+  })
+
+  test('returns options.client directly when provided', ({ assert }) => {
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+    const client = { isClient: true }
+
+    const result = adapter.modelConstructorClient({} as any, { client: client as any })
+
+    assert.strictEqual(result, client)
+    assert.lengthOf(db.calls, 0)
+  })
+
+  test('uses model connection when no HTTP context is active', ({ assert }) => {
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    adapter.modelConstructorClient({ connection: 'public' } as any)
+
+    assert.equal(db.lastCall, 'public')
+  })
+
+  test('uses options.connection over model connection when no context', ({ assert }) => {
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    adapter.modelConstructorClient({ connection: 'public' } as any, { connection: 'override_conn' })
+
+    assert.equal(db.lastCall, 'override_conn')
+  })
+
+  test('header strategy builds tenant connection from UUID in configured header', ({ assert }) => {
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: { 'x-tenant-id': UUID1 } }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    adapter.modelConstructorClient({} as any)
+
+    assert.equal(db.lastCall, `tenant_${UUID1}`)
+  })
+
+  test('respects custom tenantHeaderKey from config', ({ assert }) => {
+    setConfig({ ...testConfig, resolverStrategy: 'header', tenantHeaderKey: 'x-workspace-id' })
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: { 'x-workspace-id': UUID1 } }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    adapter.modelConstructorClient({} as any)
+
+    assert.equal(db.lastCall, `tenant_${UUID1}`)
+  })
+
+  test('subdomain strategy extracts UUID from hostname', ({ assert }) => {
+    setConfig({ ...testConfig, resolverStrategy: 'subdomain', baseDomain: 'example.com' })
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: { host: `${UUID2}.example.com` } }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    adapter.modelConstructorClient({} as any)
+
+    assert.equal(db.lastCall, `tenant_${UUID2}`)
+  })
+
+  test('path strategy extracts UUID from first URL segment', ({ assert }) => {
+    setConfig({ ...testConfig, resolverStrategy: 'path' })
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ url: `/${UUID3}/api/users` }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    adapter.modelConstructorClient({} as any)
+
+    assert.equal(db.lastCall, `tenant_${UUID3}`)
+  })
+
+  test('uses tenantConnectionNamePrefix from config', ({ assert }) => {
+    setConfig({ ...testConfig, resolverStrategy: 'header', tenantConnectionNamePrefix: 'org_' })
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: { 'x-tenant-id': UUID1 } }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    adapter.modelConstructorClient({} as any)
+
+    assert.equal(db.lastCall, `org_${UUID1}`)
+  })
+
+  test('options.connection overrides the resolved tenant connection when context exists', ({
+    assert,
+  }) => {
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: { 'x-tenant-id': UUID1 } }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    adapter.modelConstructorClient({} as any, { connection: 'explicit_conn' })
+
+    assert.equal(db.lastCall, 'explicit_conn')
+  })
+
+  test('throws MissingTenantHeaderException when tenant ID header is absent', ({ assert }) => {
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: {} }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    assert.throws(
+      () => adapter.modelConstructorClient({} as any),
+      MissingTenantHeaderException as any
+    )
+  })
+
+  test('throws MissingTenantHeaderException when tenant ID is not a valid v4 UUID', ({
+    assert,
+  }) => {
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: { 'x-tenant-id': 'not-a-uuid' } }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    assert.throws(
+      () => adapter.modelConstructorClient({} as any),
+      MissingTenantHeaderException as any
+    )
+  })
+
+  test('throws for a v3 UUID (wrong version bit)', ({ assert }) => {
+    const uuidV3 = '11111111-1111-3111-8111-111111111111'
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: { 'x-tenant-id': uuidV3 } }),
+    })
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any)
+
+    assert.throws(() => adapter.modelConstructorClient({} as any), MissingTenantHeaderException as any)
+  })
+})

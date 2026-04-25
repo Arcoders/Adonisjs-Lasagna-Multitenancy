@@ -36,14 +36,10 @@ export const testConfig: MultitenancyConfig = {
       password: 'postgres',
       database: 'test',
     },
-    s3: {
-      enabled: false,
-      bucket: '',
-      region: '',
-      endpoint: '',
-      accessKeyId: '',
-      secretAccessKey: '',
-    },
+  },
+  cache: {
+    ttl: 300,
+    redis: { host: '127.0.0.1', port: 6379, db: 2 },
   },
 }
 

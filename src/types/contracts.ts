@@ -4,7 +4,7 @@ import type { DateTime } from 'luxon'
 
 export const TENANT_REPOSITORY = Symbol('TENANT_REPOSITORY')
 
-export type TenantStatus = 'provisioning' | 'active' | 'suspended' | 'failed'
+export type TenantStatus = 'provisioning' | 'active' | 'suspended' | 'failed' | 'deleted'
 
 export interface TenantModelContract {
   readonly id: string
@@ -39,4 +39,10 @@ export interface TenantRepositoryContract {
   all(options?: { includeDeleted?: boolean; statuses?: TenantStatus[] }): Promise<TenantModelContract[]>
   whereIn(ids: string[], includeDeleted?: boolean): Promise<TenantModelContract[]>
   create(data: { name: string; email: string; status: TenantStatus }): Promise<TenantModelContract>
+}
+
+declare module '@adonisjs/core/types' {
+  interface ContainerBindings {
+    [TENANT_REPOSITORY]: TenantRepositoryContract
+  }
 }

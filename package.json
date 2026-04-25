@@ -1,9 +1,12 @@
 {
   "name": "@adonisjs-lasagna/multitenancy",
   "version": "1.0.0",
-  "description": "Schema-based multi-tenancy for AdonisJS 6 with connection pooling, circuit breaking, queues, and satellite features",
+  "description": "Schema-based multi-tenancy for AdonisJS 7 with connection pooling, circuit breaking, queues, and satellite features",
   "type": "module",
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "files": [
     "build",
     "stubs"
@@ -75,19 +78,25 @@
     "build": "tsc -p tsconfig.json && node -e \"require('fs').cpSync('src/commands/commands.json','build/src/commands/commands.json')\"",
     "typecheck": "tsc --noEmit",
     "test": "tsx bin/test.ts",
-    "test:integration": "tsx bin/test.integration.ts"
+    "test:integration": "npm run build && tsx bin/test.integration.ts"
   },
   "peerDependencies": {
     "@adonisjs/core": "^7.0.0",
     "@adonisjs/lucid": "^22.0.0",
     "@adonisjs/redis": "^10.0.0",
-    "@poppinss/utils": "*",
-    "@adonisjs/queue": "^0.6.0"
+    "@adonisjs/queue": "^0.6.0",
+    "@aws-sdk/client-s3": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-s3": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
     "bentocache": "^1.0.0",
     "bullmq": "^5.0.0",
+    "luxon": "^3.0.0",
     "opossum": "^9.0.0"
   },
   "prettier": "@adonisjs/prettier-config",
@@ -106,6 +115,7 @@
     "@japa/runner": "^4.2.0",
     "@adonisjs/queue": "^0.6.0",
     "@types/node": "^22.0.0",
+    "@types/luxon": "^3.0.0",
     "@types/opossum": "^8.1.9",
     "tsx": "^4.19.0",
     "typescript": "~5.7"
