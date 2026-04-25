@@ -114,6 +114,7 @@
     "@japa/plugin-adonisjs": "^5.0.0",
     "@japa/runner": "^4.2.0",
     "@adonisjs/queue": "^0.6.0",
+    "reflect-metadata": "^0.2.0",
     "@types/node": "^22.0.0",
     "@types/luxon": "^3.0.0",
     "@types/opossum": "^8.1.9",

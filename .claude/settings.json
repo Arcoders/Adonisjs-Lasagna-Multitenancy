@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/tenant/adonis-multi-tenancy-demo/node_modules/.pnpm/**)"
+    ]
+  }
+}
