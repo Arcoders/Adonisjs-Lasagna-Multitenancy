@@ -230,8 +230,7 @@
       "args": [],
       "options": { "startApp": true },
       "filePath": "tenant_clone.js"
-    }
-  ],
+    },
     {
       "commandName": "tenant:webhooks:retry",
       "description": "Process pending webhook retries for all tenants",
