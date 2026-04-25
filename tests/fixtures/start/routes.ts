@@ -16,6 +16,20 @@ router
       const tenant = await request.tenant()
       return response.ok({ connectionName: `tenant_${tenant.id}` })
     })
+
+    // Used by request_tenant_memo integration tests
+    router.get('/double-fetch', async ({ request, response }) => {
+      const t1 = await request.tenant()
+      const t2 = await request.tenant()
+      return response.ok({ id: t1.id, sameObject: t1 === t2 })
+    })
   })
   .prefix('tenant')
   .use(middleware.tenantGuard())
+
+// Used by custom_domain_middleware integration tests
+router
+  .get('/custom-domain-check', async ({ request, response }) => {
+    return response.ok({ tenantId: request.header('x-tenant-id') ?? null })
+  })
+  .use(middleware.customDomain())

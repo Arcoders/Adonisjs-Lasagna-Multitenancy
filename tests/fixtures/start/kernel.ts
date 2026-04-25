@@ -8,4 +8,8 @@ export const middleware = router.named({
     import('@adonisjs-lasagna/multitenancy/middleware').then((m) => ({
       default: m.TenantGuardMiddleware,
     })),
+  customDomain: () =>
+    import('@adonisjs-lasagna/multitenancy/middleware').then((m) => ({
+      default: m.CustomDomainMiddleware,
+    })),
 })

@@ -94,6 +94,32 @@ test.group('CircuitBreakerService — reset & destroy', (group) => {
   })
 })
 
+test.group('CircuitBreakerService — instance isolation', (group) => {
+  group.each.setup(() => setupTestConfig())
+
+  test('two fresh instances do NOT share circuit state', ({ assert }) => {
+    const svc1 = new CircuitBreakerService()
+    const svc2 = new CircuitBreakerService()
+
+    const breaker = svc1.getCircuit('shared-tenant')
+    breaker.open()
+
+    assert.isTrue(svc1.isOpen('shared-tenant'))
+    assert.isFalse(svc2.isOpen('shared-tenant'), 'second instance must not see first instance state')
+  })
+
+  test('getCircuit on svc2 creates an independent fresh circuit', ({ assert }) => {
+    const svc1 = new CircuitBreakerService()
+    const svc2 = new CircuitBreakerService()
+
+    svc1.getCircuit('isolation-tenant').open()
+    svc2.getCircuit('isolation-tenant')
+
+    assert.equal(svc1.getMetrics('isolation-tenant')!.state, 'OPEN')
+    assert.equal(svc2.getMetrics('isolation-tenant')!.state, 'CLOSED')
+  })
+})
+
 test.group('CircuitBreakerService — state transitions', (group) => {
   group.each.setup(() => setupTestConfig())
 

@@ -4,9 +4,14 @@ import { setConfig } from '../config.js'
 import type { MultitenancyConfig } from '../types/config.js'
 import { BackofficeAdapter, TenantAdapter } from '../models/adapters/index.js'
 import { BackofficeBaseModel, TenantBaseModel, CentralBaseModel } from '../models/base/index.js'
+import CircuitBreakerService from '../services/circuit_breaker_service.js'
 
 export default class MultitenancyProvider {
   constructor(protected app: ApplicationService) {}
+
+  register() {
+    this.app.container.singleton(CircuitBreakerService, () => new CircuitBreakerService())
+  }
 
   async boot() {
     const config = this.app.config.get<MultitenancyConfig>('multitenancy')

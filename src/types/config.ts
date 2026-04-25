@@ -44,13 +44,23 @@ export interface MultitenancyConfig {
       password: string
       database: string
     }
-    s3: {
+    s3?: {
       enabled: boolean
       bucket: string
       region: string
-      endpoint: string
+      endpoint?: string
       accessKeyId: string
       secretAccessKey: string
+    }
+  }
+  cache: {
+    ttl: number
+    redis: {
+      host: string
+      port: number
+      username?: string
+      password?: string
+      db?: number
     }
   }
   onboarding?: {

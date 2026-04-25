@@ -35,13 +35,13 @@ export default {
       password: env.get('DB_PASSWORD', ''),
       database: env.get('DB_DATABASE'),
     },
-    s3: {
-      enabled: false,
-      bucket: '',
-      region: 'us-east-1',
-      endpoint: '',
-      accessKeyId: '',
-      secretAccessKey: '',
+  },
+  cache: {
+    ttl: 300,
+    redis: {
+      host: env.get('CACHE_REDIS_HOST', env.get('QUEUE_REDIS_HOST', '127.0.0.1')),
+      port: env.get('CACHE_REDIS_PORT', env.get('QUEUE_REDIS_PORT', 6379)),
+      db: env.get('CACHE_REDIS_DB', 2),
     },
   },
 }

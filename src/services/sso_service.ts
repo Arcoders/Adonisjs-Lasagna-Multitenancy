@@ -1,4 +1,5 @@
 import TenantSsoConfig from '../models/satellites/tenant_sso_config.js'
+import { getCache } from '../utils/cache.js'
 import redis from '@adonisjs/redis/services/main'
 import { randomBytes } from 'node:crypto'
 
@@ -93,9 +94,15 @@ export default class SsoService {
   }
 
   private async discover(issuerUrl: string): Promise<OidcDiscovery> {
-    const base = issuerUrl.replace(/\/$/, '')
-    const res = await fetch(`${base}/.well-known/openid-configuration`)
-    if (!res.ok) throw new Error(`OIDC discovery failed for ${issuerUrl}`)
-    return res.json() as Promise<OidcDiscovery>
+    return getCache().namespace('sso').getOrSet({
+      key: `oidc:discovery:${issuerUrl}`,
+      ttl: '3600s',
+      factory: async () => {
+        const base = issuerUrl.replace(/\/$/, '')
+        const res = await fetch(`${base}/.well-known/openid-configuration`)
+        if (!res.ok) throw new Error(`OIDC discovery failed for ${issuerUrl}`)
+        return res.json() as Promise<OidcDiscovery>
+      },
+    }) as Promise<OidcDiscovery>
   }
 }

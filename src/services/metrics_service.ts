@@ -23,10 +23,21 @@ export default class MetricsService {
     await redis.expire(this.key(tenantId, 'bandwidth', period), 172800)
   }
 
+  private async scanKeys(pattern: string): Promise<string[]> {
+    const keys: string[] = []
+    let cursor = '0'
+    do {
+      const [next, batch] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 200)
+      keys.push(...(batch as string[]))
+      cursor = next as string
+    } while (cursor !== '0')
+    return keys
+  }
+
   async flush(period?: string): Promise<void> {
     const target = period ?? this.currentPeriod()
     const pattern = `metrics:*:${target}:*`
-    const keys = await redis.keys(pattern)
+    const keys = await this.scanKeys(pattern)
 
     const tenantPeriods = new Map<string, { requests: number; errors: number; bandwidth: number }>()
 
