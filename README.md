@@ -441,6 +441,14 @@ This happens when `tenant:migrate` is run twice on the same tenant without a rol
 
 ---
 
+## 🤝 Contributing
+
+Pull requests, bug reports, and feature ideas are all welcome. Have a look at [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, the test workflow, and a few notes on how we like to keep things tidy. If you're not sure whether something fits, open an issue first and we'll talk it through.
+
+The repository lives at [github.com/Arcoders/Adonisjs-Lasagna-Multitenancy](https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy).
+
+---
+
 ## License
 
-See `LICENSE` file. Contact the maintainers for licensing terms.
+MIT © [Ismael Haytam Tanane](https://github.com/Arcoders). See the [LICENSE](LICENSE) file for the full text.
