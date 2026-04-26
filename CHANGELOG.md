@@ -6,6 +6,30 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.2] — 2026-04-26
+
+### Added
+
+- MIT `LICENSE` file (© Ismael Haytam Tanane)
+- `CONTRIBUTING.md` with setup, test, and PR workflow guidance
+- `package.json` metadata: `author`, `homepage`, `repository`, `bugs`, `keywords`
+
+### Changed
+
+- `license` field switched from `UNLICENSED` to `MIT`
+- README License section now points to the new `LICENSE` file
+- README gained a Contributing section linking to `CONTRIBUTING.md`
+
+---
+
+## [1.0.1] — 2026-04-25
+
+### Fixed
+
+- `src/commands/commands.json` had a stray `]` at line 234 that closed the commands array early, leaving `tenant:webhooks:retry` and `tenant:metrics:flush` outside the array and breaking JSON parsing on install
+
+---
+
 ## [1.0.0] — 2026-04-21
 
 ### Added
@@ -82,4 +106,6 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
-[1.0.0]: https://github.com/Arcoders/adonis-multi-tenancy-demo/releases/tag/v1.0.0
+[1.0.2]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.2
+[1.0.1]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.1
+[1.0.0]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.0
