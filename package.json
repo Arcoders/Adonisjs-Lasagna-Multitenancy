@@ -1,6 +1,6 @@
 {
   "name": "@adonisjs-lasagna/multitenancy",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Schema-based multi-tenancy for AdonisJS 7 with connection pooling, circuit breaking, queues, and satellite features",
   "type": "module",
   "license": "MIT",

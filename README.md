@@ -1,5 +1,25 @@
 # @adonisjs-lasagna/multitenancy
 
+```
+ ██╗      █████╗ ███████╗ █████╗  ██████╗ ███╗   ██╗ █████╗
+ ██║     ██╔══██╗██╔════╝██╔══██╗██╔════╝ ████╗  ██║██╔══██╗
+ ██║     ███████║███████╗███████║██║  ███╗██╔██╗ ██║███████║
+ ██║     ██╔══██║╚════██║██╔══██║██║   ██║██║╚██╗██║██╔══██║
+ ███████╗██║  ██║███████║██║  ██║╚██████╔╝██║ ╚████║██║  ██║
+ ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝
+```
+
+*💡 Built because the AdonisJS ecosystem deserved a proper multi-tenancy foundation.*
+
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A524-green)](https://nodejs.org)
+[![AdonisJS](https://img.shields.io/badge/AdonisJS-7-5a45ff)](https://adonisjs.com)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-%E2%89%A514-336791)](https://www.postgresql.org)
+[![Redis](https://img.shields.io/badge/Redis-%E2%89%A56-DC382D)](https://redis.io)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)](./tests)
+[![License](https://img.shields.io/badge/License-MIT-blue)](./LICENSE)
+
+---
+
 Schema-based multi-tenancy for AdonisJS 7. Each tenant lives in its own isolated PostgreSQL schema, giving you complete data separation without the overhead of separate databases.
 
 If you're building a SaaS app on AdonisJS and want true tenant isolation (not just a `tenant_id` column), this package handles the heavy lifting: schema provisioning, connection routing, circuit breaking, background jobs, and a suite of optional satellite features like webhooks, audit logs, and SSO.

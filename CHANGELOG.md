@@ -6,6 +6,14 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.3] — 2026-04-27
+
+### Changed
+
+- README now opens with a Lasagna ASCII banner, tagline, and status badges (Node.js, AdonisJS, PostgreSQL, Redis, tests, license)
+
+---
+
 ## [1.0.2] — 2026-04-26
 
 ### Added
@@ -106,6 +114,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+[1.0.3]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.2
 [1.0.1]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.0
