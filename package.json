@@ -1,6 +1,6 @@
 {
   "name": "@adonisjs-lasagna/multitenancy",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Schema-based multi-tenancy for AdonisJS 7 with connection pooling, circuit breaking, queues, and satellite features",
   "type": "module",
   "license": "MIT",
@@ -103,10 +103,14 @@
     "@adonisjs/lucid": "^22.0.0",
     "@adonisjs/redis": "^10.0.0",
     "@adonisjs/queue": "^0.6.0",
-    "@aws-sdk/client-s3": "^3.0.0"
+    "@aws-sdk/client-s3": "^3.0.0",
+    "pg-copy-streams": "^6.0.0"
   },
   "peerDependenciesMeta": {
     "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "pg-copy-streams": {
       "optional": true
     }
   },

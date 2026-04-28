@@ -1,3 +1,59 @@
+export type SqlToken =
+  | { kind: 'sql'; text: string }
+  | { kind: 'copy'; header: string; rows: string[] }
+
+const COPY_FROM_STDIN_RE = /^\s*COPY\s+.+\sFROM\s+stdin\b/i
+
+/**
+ * Tagged splitter that recognizes `COPY … FROM stdin` blocks. Each COPY block
+ * is emitted as a single token containing its header (the COPY statement
+ * itself) and the data rows that follow it up to the `\.` terminator.
+ *
+ * Use this when you need to send the data section through pg-copy-streams
+ * instead of treating each row as a SQL statement.
+ */
+export function splitSqlStatementsTagged(sql: string): SqlToken[] {
+  const tokens: SqlToken[] = []
+  const lines = sql.split('\n')
+  let buffer: string[] = []
+
+  const flushBuffer = () => {
+    if (buffer.length === 0) return
+    const joined = buffer.join('\n')
+    for (const stmt of splitSqlStatements(joined)) {
+      tokens.push({ kind: 'sql', text: stmt })
+    }
+    buffer = []
+  }
+
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    if (COPY_FROM_STDIN_RE.test(line)) {
+      flushBuffer()
+      const header = line.replace(/;\s*$/, '').trim()
+      const rows: string[] = []
+      i++
+      while (i < lines.length) {
+        const rowLine = lines[i]
+        if (rowLine === '\\.') {
+          i++
+          break
+        }
+        rows.push(rowLine)
+        i++
+      }
+      tokens.push({ kind: 'copy', header, rows })
+      continue
+    }
+    buffer.push(line)
+    i++
+  }
+
+  flushBuffer()
+  return tokens
+}
+
 /**
  * State-machine SQL splitter for PostgreSQL pg_dump output.
  *
