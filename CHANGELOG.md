@@ -6,6 +6,23 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.4] — 2026-04-27
+
+### Fixed
+
+- `tenant:create` now actually dispatches `InstallTenant` after inserting the row. Previously the CLI would log "queued" but no job was ever enqueued, leaving every CLI-created tenant stuck at `status='provisioning'`.
+- `tenant:import` now correctly handles `COPY … FROM stdin` blocks, the default format produced by `pg_dump`. Previously the splitter treated each tab-separated data row as its own SQL statement and every row failed with a syntax error, leaving target tables empty.
+- The post-create log message now points at `node ace queue:work` (the real command) instead of the non-existent `queue:listen`.
+- README's commands section: `tenant:import-sql` corrected to `tenant:import`, and the `tenant:restore` example now makes clear it expects a custom-format archive (`.dump`), not a plain `.sql` file.
+
+### Added
+
+- `pg-copy-streams` as an optional peer dependency. Required only when importing plain-text `pg_dump` files that contain `COPY … FROM stdin` blocks. If absent, `tenant:import` fails fast with a clear remediation message.
+- `splitSqlStatementsTagged()` in `src/utils/sql_splitter.ts`. Tokenizes SQL into `{ kind: 'sql' }` and `{ kind: 'copy', header, rows }` units so callers can route COPY blocks through the wire-protocol streaming path.
+- `SqlImportResult` now reports `copyBlocksExecuted` and `copyRowsImported` alongside the per-statement counters.
+
+---
+
 ## [1.0.3] — 2026-04-27
 
 ### Changed
@@ -114,6 +131,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+[1.0.4]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.4
 [1.0.3]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.2
 [1.0.1]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.1

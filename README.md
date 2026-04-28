@@ -157,10 +157,16 @@ router.use([
 ### 6. Create your first tenant
 
 ```bash
-node ace tenant:create --name="Acme Corp" --email="admin@acme.example.com"
+node ace tenant:create "Acme Corp" "admin@acme.example.com"
 ```
 
-This provisions the schema, runs migrations, and sets the status to `active`. That's it.
+This inserts the tenant row and dispatches an `InstallTenant` job. Make sure a queue worker is running so the schema actually gets created:
+
+```bash
+node ace queue:work
+```
+
+Once the job processes, the tenant moves to `status: 'active'` and you can start hitting tenant-scoped routes.
 
 ---
 
@@ -324,11 +330,11 @@ node ace tenant:rollback-migrations   # all active tenants
 # Backups
 node ace tenant:backup <uuid>
 node ace tenant:backup:list <uuid>
-node ace tenant:restore <uuid> --file=<backup.sql>
+node ace tenant:restore <uuid> --file=<backup.dump>   # custom-format archive (pg_dump -Fc)
 
 # Cloning and importing
 node ace tenant:clone <source-uuid> --name="Clone" --email="clone@example.com"
-node ace tenant:import-sql <uuid> --file=<dump.sql>
+node ace tenant:import --tenant=<uuid> --file=<dump.sql>   # plain-text SQL dump
 
 # Maintenance
 node ace tenant:webhooks:retry        # retry pending webhook deliveries
@@ -340,6 +346,8 @@ node ace backoffice:setup
 ```
 
 Add `tenant:webhooks:retry` and `tenant:metrics:flush` to your cron schedule. They're built to run frequently, every 1 to 5 minutes and daily respectively.
+
+> **Restore vs Import.** `tenant:restore` shells out to `pg_restore`, which only reads custom-format archives produced by `pg_dump -Fc` (or `-Fd`). For plain-text `.sql` dumps (the default `pg_dump` output), use `tenant:import` instead. If your dump uses `COPY … FROM stdin` blocks (also the default), install `pg-copy-streams` first: `npm i pg-copy-streams`.
 
 ---
 
