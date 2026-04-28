@@ -1,4 +1,7 @@
-import { readFile, access } from 'node:fs/promises'
+import { readFile, access, writeFile, unlink, mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawn } from 'node:child_process'
 import logger from '@adonisjs/core/services/logger'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import type { TenantModelContract } from '../types/contracts.js'
@@ -16,6 +19,12 @@ export interface SqlImportResult {
   copyBlocksExecuted: number
   copyRowsImported: number
   errors: Array<{ statement: string; message: string }>
+  /**
+   * 'transactional' when the dump was applied via Lucid in a savepoint transaction.
+   * 'psql' when the dump contained `COPY … FROM stdin` blocks and was applied by
+   * shelling out to the `psql` CLI.
+   */
+  mode: 'transactional' | 'psql' | 'dry-run'
 }
 
 const SKIP_PATTERNS = [
@@ -24,15 +33,23 @@ const SKIP_PATTERNS = [
   /^\\[a-z]/i,
 ]
 
-class CopyStreamUnavailableError extends Error {
+class PsqlNotAvailableError extends Error {
   constructor() {
     super(
-      'This dump uses `COPY … FROM stdin`, which requires the `pg-copy-streams` package. ' +
-        'Install it with `npm i pg-copy-streams`, or re-export the dump with `pg_dump --inserts` ' +
-        'so rows are emitted as INSERT statements.'
+      'This dump contains `COPY … FROM stdin` blocks. The importer needs the `psql` ' +
+        'command on your PATH to load them. Install the PostgreSQL client tools, or ' +
+        're-export the dump with `pg_dump --inserts` so rows are emitted as INSERT statements.'
     )
-    this.name = 'CopyStreamUnavailableError'
+    this.name = 'PsqlNotAvailableError'
   }
+}
+
+interface PgConnectionConfig {
+  host: string
+  port: number
+  user: string
+  password?: string
+  database: string
 }
 
 export default class SqlImportService {
@@ -46,17 +63,18 @@ export default class SqlImportService {
     const raw = await readFile(filePath, 'utf-8')
     const transformed = this.#rewriteSchema(raw, options.sourceSchema, tenant.schemaName)
     const tokens = splitSqlStatementsTagged(transformed)
-
-    const result: SqlImportResult = {
-      statementsTotal: tokens.length,
-      statementsExecuted: 0,
-      statementsSkipped: 0,
-      copyBlocksExecuted: 0,
-      copyRowsImported: 0,
-      errors: [],
-    }
+    const hasCopyBlocks = tokens.some((t) => t.kind === 'copy')
 
     if (options.dryRun) {
+      const result: SqlImportResult = {
+        statementsTotal: tokens.length,
+        statementsExecuted: 0,
+        statementsSkipped: 0,
+        copyBlocksExecuted: 0,
+        copyRowsImported: 0,
+        errors: [],
+        mode: 'dry-run',
+      }
       for (const token of tokens) {
         if (token.kind === 'copy') {
           result.copyBlocksExecuted++
@@ -70,20 +88,32 @@ export default class SqlImportService {
       return result
     }
 
-    const hasCopyBlocks = tokens.some((t) => t.kind === 'copy')
-    let copyFromFn: ((q: string) => any) | null = null
     if (hasCopyBlocks) {
-      copyFromFn = await this.#loadCopyFrom()
-      if (!copyFromFn) {
-        throw new CopyStreamUnavailableError()
-      }
+      return await this.#runViaPsql(tenant, transformed, tokens)
+    }
+
+    return await this.#runTransactional(tenant, tokens)
+  }
+
+  async #runTransactional(
+    tenant: TenantModelContract,
+    tokens: ReturnType<typeof splitSqlStatementsTagged>
+  ): Promise<SqlImportResult> {
+    const result: SqlImportResult = {
+      statementsTotal: tokens.length,
+      statementsExecuted: 0,
+      statementsSkipped: 0,
+      copyBlocksExecuted: 0,
+      copyRowsImported: 0,
+      errors: [],
+      mode: 'transactional',
     }
 
     const connection = tenant.getConnection()
 
     logger.info(
-      { tenantId: tenant.id, schema: tenant.schemaName, filePath, total: tokens.length },
-      'Starting SQL import'
+      { tenantId: tenant.id, schema: tenant.schemaName, total: tokens.length },
+      'Starting transactional SQL import'
     )
 
     await connection.transaction(async (trx: TransactionClientContract) => {
@@ -93,22 +123,7 @@ export default class SqlImportService {
 
       for (const token of tokens) {
         if (token.kind === 'copy') {
-          const sp = `_import_sp_${spIndex++}`
-          await trx.rawQuery(`SAVEPOINT ${sp}`)
-          try {
-            await this.#runCopyBlock(trx, token.header, token.rows, copyFromFn!)
-            await trx.rawQuery(`RELEASE SAVEPOINT ${sp}`)
-            result.copyBlocksExecuted++
-            result.copyRowsImported += token.rows.length
-          } catch (err: any) {
-            await trx.rawQuery(`ROLLBACK TO SAVEPOINT ${sp}`)
-            await trx.rawQuery(`RELEASE SAVEPOINT ${sp}`)
-            result.errors.push({
-              statement: token.header.slice(0, 200),
-              message: err.message ?? String(err),
-            })
-            logger.warn({ header: token.header.slice(0, 120), err: err.message }, 'COPY block failed')
-          }
+          // Should never happen — caller routes COPY-bearing dumps to #runViaPsql
           continue
         }
 
@@ -144,45 +159,144 @@ export default class SqlImportService {
         tenantId: tenant.id,
         executed: result.statementsExecuted,
         skipped: result.statementsSkipped,
-        copyBlocks: result.copyBlocksExecuted,
-        copyRows: result.copyRowsImported,
         errors: result.errors.length,
       },
-      'SQL import complete'
+      'Transactional SQL import complete'
     )
 
     return result
   }
 
-  async #loadCopyFrom(): Promise<((q: string) => any) | null> {
-    try {
-      // @ts-ignore — pg-copy-streams is an optional peer dependency
-      const mod: any = await import('pg-copy-streams')
-      return mod.from ?? mod.default?.from ?? null
-    } catch {
-      return null
+  async #runViaPsql(
+    tenant: TenantModelContract,
+    transformedSql: string,
+    tokens: ReturnType<typeof splitSqlStatementsTagged>
+  ): Promise<SqlImportResult> {
+    const psqlAvailable = await this.#hasPsql()
+    if (!psqlAvailable) {
+      throw new PsqlNotAvailableError()
     }
+
+    const cfg = this.#extractPgConfig(tenant)
+
+    const dir = await mkdtemp(join(tmpdir(), 'tenant-import-'))
+    const tmpFile = join(dir, `${tenant.id}.sql`)
+    await writeFile(tmpFile, transformedSql, 'utf-8')
+
+    const result: SqlImportResult = {
+      statementsTotal: tokens.length,
+      statementsExecuted: 0,
+      statementsSkipped: 0,
+      copyBlocksExecuted: tokens.filter((t) => t.kind === 'copy').length,
+      copyRowsImported: tokens.reduce(
+        (n, t) => (t.kind === 'copy' ? n + t.rows.length : n),
+        0
+      ),
+      errors: [],
+      mode: 'psql',
+    }
+
+    logger.info(
+      {
+        tenantId: tenant.id,
+        schema: tenant.schemaName,
+        copyBlocks: result.copyBlocksExecuted,
+        copyRows: result.copyRowsImported,
+      },
+      'Starting psql SQL import'
+    )
+
+    try {
+      const stderr = await this.#spawnPsql(cfg, tmpFile)
+      const errorLines = stderr
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith('ERROR:') || l.startsWith('FATAL:'))
+
+      for (const line of errorLines) {
+        result.errors.push({ statement: '(see psql stderr)', message: line })
+      }
+
+      // Tokens minus skipped meta-commands; everything else handed to psql.
+      result.statementsExecuted =
+        tokens.filter((t) => t.kind === 'sql' && !this.#shouldSkip(t.text)).length +
+        result.copyBlocksExecuted -
+        result.errors.length
+      result.statementsSkipped = tokens.filter(
+        (t) => t.kind === 'sql' && this.#shouldSkip(t.text)
+      ).length
+    } finally {
+      await unlink(tmpFile).catch(() => {})
+    }
+
+    logger.info(
+      {
+        tenantId: tenant.id,
+        executed: result.statementsExecuted,
+        copyRows: result.copyRowsImported,
+        errors: result.errors.length,
+      },
+      'psql SQL import complete'
+    )
+
+    return result
   }
 
-  async #runCopyBlock(
-    trx: TransactionClientContract,
-    header: string,
-    rows: string[],
-    copyFromFn: (q: string) => any
-  ): Promise<void> {
-    const pgClient = (trx as any).knexClient?.client ?? (trx as any).client?.client
-    if (!pgClient) {
-      throw new Error('Could not access raw pg client from Lucid transaction for COPY streaming')
-    }
-    const stream = pgClient.query(copyFromFn(header))
-    await new Promise<void>((resolve, reject) => {
-      stream.on('error', reject)
-      stream.on('finish', resolve)
-      for (const row of rows) {
-        stream.write(`${row}\n`)
-      }
-      stream.end()
+  async #hasPsql(): Promise<boolean> {
+    return await new Promise((resolve) => {
+      const proc = spawn('psql', ['--version'], { shell: false })
+      proc.on('error', () => resolve(false))
+      proc.on('exit', (code) => resolve(code === 0))
     })
+  }
+
+  async #spawnPsql(cfg: PgConnectionConfig, file: string): Promise<string> {
+    return await new Promise((resolve, reject) => {
+      const args = [
+        '-h', cfg.host,
+        '-p', String(cfg.port),
+        '-U', cfg.user,
+        '-d', cfg.database,
+        '-v', 'ON_ERROR_STOP=off',
+        '-f', file,
+      ]
+      const env = { ...process.env }
+      if (cfg.password) env.PGPASSWORD = cfg.password
+
+      const proc = spawn('psql', args, { env, shell: false })
+      let stderr = ''
+      proc.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString()
+      })
+      proc.on('error', reject)
+      proc.on('exit', (code) => {
+        // psql returns 3 when ON_ERROR_STOP=off and some statements errored,
+        // 0 when fully successful. Both are acceptable; we report errors via stderr.
+        if (code === 0 || code === 3) {
+          resolve(stderr)
+        } else {
+          reject(new Error(`psql exited with code ${code}: ${stderr.slice(0, 500)}`))
+        }
+      })
+    })
+  }
+
+  #extractPgConfig(tenant: TenantModelContract): PgConnectionConfig {
+    const conn: any = tenant.getConnection()
+    const knexCfg = conn?.connection?.client?.config?.connection ?? conn?.client?.config?.connection
+    if (!knexCfg) {
+      throw new Error(
+        'Could not read PostgreSQL connection config from the tenant connection. ' +
+          'This is required to invoke psql for COPY-bearing dumps.'
+      )
+    }
+    return {
+      host: knexCfg.host,
+      port: Number(knexCfg.port ?? 5432),
+      user: knexCfg.user,
+      password: knexCfg.password,
+      database: knexCfg.database,
+    }
   }
 
   #rewriteSchema(sql: string, source: string, target: string): string {
@@ -199,3 +313,5 @@ export default class SqlImportService {
     return SKIP_PATTERNS.some((p) => p.test(stmt.trimStart()))
   }
 }
+
+export { PsqlNotAvailableError }
