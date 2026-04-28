@@ -4,8 +4,11 @@ import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 import logger from '@adonisjs/core/services/logger'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import { getConfig } from '../config.js'
 import type { TenantModelContract } from '../types/contracts.js'
 import { splitSqlStatementsTagged } from '../utils/sql_splitter.js'
+
+const isWin = process.platform === 'win32'
 
 export interface SqlImportOptions {
   sourceSchema: string
@@ -177,7 +180,7 @@ export default class SqlImportService {
       throw new PsqlNotAvailableError()
     }
 
-    const cfg = this.#extractPgConfig(tenant)
+    const cfg = this.#extractPgConfig()
 
     const dir = await mkdtemp(join(tmpdir(), 'tenant-import-'))
     const tmpFile = join(dir, `${tenant.id}.sql`)
@@ -244,7 +247,7 @@ export default class SqlImportService {
 
   async #hasPsql(): Promise<boolean> {
     return await new Promise((resolve) => {
-      const proc = spawn('psql', ['--version'], { shell: false })
+      const proc = spawn('psql', ['--version'], { shell: isWin })
       proc.on('error', () => resolve(false))
       proc.on('exit', (code) => resolve(code === 0))
     })
@@ -263,7 +266,7 @@ export default class SqlImportService {
       const env = { ...process.env }
       if (cfg.password) env.PGPASSWORD = cfg.password
 
-      const proc = spawn('psql', args, { env, shell: false })
+      const proc = spawn('psql', args, { env, shell: isWin })
       let stderr = ''
       proc.stderr.on('data', (chunk: Buffer) => {
         stderr += chunk.toString()
@@ -281,21 +284,21 @@ export default class SqlImportService {
     })
   }
 
-  #extractPgConfig(tenant: TenantModelContract): PgConnectionConfig {
-    const conn: any = tenant.getConnection()
-    const knexCfg = conn?.connection?.client?.config?.connection ?? conn?.client?.config?.connection
-    if (!knexCfg) {
+  #extractPgConfig(): PgConnectionConfig {
+    const pg = getConfig().backup?.pgConnection
+    if (!pg?.host || !pg?.user || !pg?.database) {
       throw new Error(
-        'Could not read PostgreSQL connection config from the tenant connection. ' +
-          'This is required to invoke psql for COPY-bearing dumps.'
+        'multitenancy.backup.pgConnection is not configured. ' +
+          'Set host/port/user/password/database in config/multitenancy.ts ' +
+          'so the importer can invoke psql for COPY-bearing dumps.'
       )
     }
     return {
-      host: knexCfg.host,
-      port: Number(knexCfg.port ?? 5432),
-      user: knexCfg.user,
-      password: knexCfg.password,
-      database: knexCfg.database,
+      host: pg.host,
+      port: Number(pg.port ?? 5432),
+      user: pg.user,
+      password: pg.password ?? '',
+      database: pg.database,
     }
   }
 
