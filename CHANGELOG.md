@@ -6,6 +6,23 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.0.5] — 2026-04-28
+
+### Fixed
+
+- `tenant:import` no longer crashes the host process when the dump contains `COPY … FROM stdin` blocks. The previous attempt at wire-protocol streaming via `pg-copy-streams` failed at runtime on Knex 3 / Lucid 22 because the borrowed transaction client doesn't expose a usable `pg.Client`, so any plain-text `pg_dump` would throw `Invalid connection for transaction query` at the first COPY block. See `multitenancy-1.0.4-verification-report.md` for the field repro.
+
+### Changed
+
+- `tenant:import` now shells out to `psql` when the dump contains COPY blocks, and uses the existing transactional Lucid path only for INSERT-only dumps. The `psql` command must be available on the user's PATH (this is the case for any developer with the PostgreSQL client tools installed).
+- `SqlImportResult` now carries a `mode` field: `'transactional'`, `'psql'`, or `'dry-run'`. Useful when reporting which path ran.
+
+### Removed
+
+- `pg-copy-streams` optional peer dependency. It was only there for the v1.0.4 attempt that never worked in any release. Consumers who installed it can uninstall it safely.
+
+---
+
 ## [1.0.4] — 2026-04-27
 
 ### Fixed
@@ -131,6 +148,7 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+[1.0.5]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.5
 [1.0.4]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.4
 [1.0.3]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Arcoders/Adonisjs-Lasagna-Multitenancy/releases/tag/v1.0.2

@@ -347,7 +347,7 @@ node ace backoffice:setup
 
 Add `tenant:webhooks:retry` and `tenant:metrics:flush` to your cron schedule. They're built to run frequently, every 1 to 5 minutes and daily respectively.
 
-> **Restore vs Import.** `tenant:restore` shells out to `pg_restore`, which only reads custom-format archives produced by `pg_dump -Fc` (or `-Fd`). For plain-text `.sql` dumps (the default `pg_dump` output), use `tenant:import` instead. If your dump uses `COPY … FROM stdin` blocks (also the default), install `pg-copy-streams` first: `npm i pg-copy-streams`.
+> **Restore vs Import.** `tenant:restore` shells out to `pg_restore`, which only reads custom-format archives produced by `pg_dump -Fc` (or `-Fd`). For plain-text `.sql` dumps (the default `pg_dump` output), use `tenant:import` instead. If your dump uses `COPY … FROM stdin` blocks (also the default), `tenant:import` will shell out to `psql` to load them, so make sure the PostgreSQL client tools are installed and `psql` is on your PATH.
 
 ---
 
