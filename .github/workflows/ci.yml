@@ -18,8 +18,14 @@ jobs:
         with:
           node-version: '24'
 
+      # Repo .npmrc sets `ignore-scripts=true` for local-dev safety. CI is a
+      # controlled environment and tsx/esbuild rely on the postinstall fallback
+      # to fetch the platform binary (`@esbuild/<os>-<arch>`) when optional-dep
+      # resolution doesn't pick it up — so we re-enable scripts here.
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        env:
+          npm_config_ignore_scripts: 'false'
+        run: npm install --legacy-peer-deps --include=optional
 
       - name: Typecheck
         run: npm run typecheck
@@ -90,7 +96,9 @@ jobs:
           node-version: '24'
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        env:
+          npm_config_ignore_scripts: 'false'
+        run: npm install --legacy-peer-deps --include=optional
 
       - name: Test (integration)
         run: npm run test:integration
@@ -176,7 +184,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends postgresql-client
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        env:
+          npm_config_ignore_scripts: 'false'
+        run: npm install --legacy-peer-deps --include=optional
 
       # Demo's `@adonisjs-lasagna/multitenancy` is a workspace symlink that
       # resolves through `build/`, so a fresh build is mandatory before the
