@@ -199,11 +199,19 @@ test.group('e2e — backup, restore, import, clone (real)', (group) => {
 
     const source = await createInstalledTenant(client, { name: 'CloneSrcReal' })
     for (let i = 0; i < 5; i++) {
-      await client
+      const r = await client
         .post('/demo/notes')
         .header('x-tenant-id', source.id)
         .json({ title: `src-${i}`, body: `body ${i}` })
+      r.assertStatus(201)
     }
+
+    // Sanity: source schema actually has the 5 rows we just inserted.
+    const sourceTenant = await Tenant.findOrFail(source.id)
+    const srcCount = await sourceTenant
+      .getConnection()
+      .rawQuery('SELECT count(*)::int AS n FROM notes')
+    assert.equal(srcCount.rows[0].n, 5, 'source schema should have 5 notes before clone')
 
     const stamp = Date.now().toString(36)
     const code = await runAce('tenant:clone', [
@@ -216,6 +224,8 @@ test.group('e2e — backup, restore, import, clone (real)', (group) => {
     const dest = await Tenant.query()
       .where('email', `cloned-${stamp}@e2e.test`)
       .firstOrFail()
+    assert.equal(dest.status, 'active', 'destination should be active after clone')
+
     const conn = dest.getConnection()
     const result = await conn.rawQuery('SELECT count(*)::int AS n FROM notes')
     assert.equal(result.rows[0].n, 5, 'cloned schema should carry the source rows')

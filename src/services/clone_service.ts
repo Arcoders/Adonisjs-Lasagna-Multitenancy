@@ -1,6 +1,10 @@
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
-import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import type {
+  QueryClientContract,
+  TransactionClientContract,
+} from '@adonisjs/lucid/types/database'
+import { getConfig } from '../config.js'
 import type { TenantModelContract } from '../types/contracts.js'
 
 export interface CloneOptions {
@@ -76,12 +80,20 @@ export default class CloneService {
     const srcSchema = source.schemaName
     const dstSchema = dest.schemaName
 
-    const tables = await this.#getTableNames(srcSchema)
+    // Run cross-schema operations on the central connection rather than the
+    // default. The default connection is the per-tenant template that gets
+    // cloned by the package at runtime; using it for one-off queries was
+    // flaky on Linux runners where the connection state resets between
+    // statements. The central connection is a stable, app-owned pool with
+    // full database access.
+    const conn = db.connection(getConfig().centralConnectionName)
+
+    const tables = await this.#getTableNames(srcSchema, conn)
     const copyable = tables.filter((t) => !MIGRATION_TABLES.has(t))
 
     let rowsCopied = 0
 
-    await db.transaction(async (trx) => {
+    await conn.transaction(async (trx) => {
       await trx.rawQuery(`SET LOCAL session_replication_role = replica`)
 
       for (const table of copyable) {
@@ -103,8 +115,9 @@ export default class CloneService {
     return { tablesCopied: copyable.length, rowsCopied }
   }
 
-  async #getTableNames(schema: string): Promise<string[]> {
-    const result = await db.rawQuery(
+  async #getTableNames(schema: string, conn?: QueryClientContract): Promise<string[]> {
+    const runner = conn ?? db
+    const result = await runner.rawQuery(
       `SELECT tablename FROM pg_tables WHERE schemaname = ? ORDER BY tablename`,
       [schema]
     )
