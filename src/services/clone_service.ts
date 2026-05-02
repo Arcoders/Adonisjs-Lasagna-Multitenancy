@@ -1,6 +1,7 @@
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
-import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
+import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
+import { getConfig } from '../config.js'
 import type { TenantModelContract } from '../types/contracts.js'
 
 export interface CloneOptions {
@@ -28,6 +29,11 @@ export default class CloneService {
     try {
       await destination.install()
 
+      // `install()` creates the schema and the connection but doesn't run
+      // tenant migrations. Run them now so the destination has the same DDL
+      // as the source before we copy rows into it.
+      await destination.migrate({ direction: 'up' })
+
       let tablesCopied = 0
       let rowsCopied = 0
 
@@ -36,6 +42,16 @@ export default class CloneService {
         tablesCopied = result.tablesCopied
         rowsCopied = result.rowsCopied
       }
+
+      // The destination's pooled connection was opened during install() —
+      // BEFORE migrations created any tables and BEFORE the central
+      // connection committed the row copy. PostgreSQL caches relation OIDs
+      // and prepared statement plans per session, so leaving that pool
+      // around can cause subsequent reads to see an empty (or missing)
+      // notes table even though the data is committed. Closing the
+      // connection forces the next getConnection() call to open a fresh
+      // session with a clean catalog view.
+      await destination.closeConnection().catch(() => {})
 
       logger.info(
         { sourceId: source.id, destId: destination.id, tablesCopied, rowsCopied },
@@ -71,19 +87,44 @@ export default class CloneService {
     const srcSchema = source.schemaName
     const dstSchema = dest.schemaName
 
-    const tables = await this.#getTableNames(srcSchema)
-    const copyable = tables.filter((t) => !MIGRATION_TABLES.has(t))
+    // Run cross-schema operations on the central connection rather than the
+    // default. The default connection is the per-tenant template that gets
+    // cloned by the package at runtime; using it for one-off queries was
+    // flaky on Linux runners where the connection state resets between
+    // statements. The central connection is a stable, app-owned pool with
+    // full database access.
+    const conn = db.connection(getConfig().centralConnectionName)
+
+    const srcTables = await this.#getTableNames(srcSchema, conn)
+    const dstTables = await this.#getTableNames(dstSchema, conn)
+    const copyable = srcTables.filter((t) => !MIGRATION_TABLES.has(t))
+    const dstSet = new Set(dstTables)
+
+    logger.info(
+      { srcSchema, dstSchema, srcTables, dstTables, copyable },
+      'Clone: discovered tables before copy'
+    )
 
     let rowsCopied = 0
+    const perTable: Record<string, number> = {}
 
-    await db.transaction(async (trx) => {
+    await conn.transaction(async (trx) => {
       await trx.rawQuery(`SET LOCAL session_replication_role = replica`)
 
       for (const table of copyable) {
+        if (!dstSet.has(table)) {
+          logger.warn(
+            { srcSchema, dstSchema, table },
+            'Clone: destination missing table, skipping copy'
+          )
+          continue
+        }
         const result = await trx.rawQuery(
           `INSERT INTO "${dstSchema}"."${table}" SELECT * FROM "${srcSchema}"."${table}"`
         )
-        rowsCopied += (result as any).rowCount ?? 0
+        const n = (result as any).rowCount ?? 0
+        rowsCopied += n
+        perTable[table] = n
       }
 
       await trx.rawQuery(`SET LOCAL session_replication_role = DEFAULT`)
@@ -95,11 +136,17 @@ export default class CloneService {
       await this.#resetIntegerSequences(trx, dstSchema, copyable)
     })
 
+    logger.info(
+      { srcSchema, dstSchema, tablesCopied: copyable.length, rowsCopied, perTable },
+      'Clone: copy phase finished'
+    )
+
     return { tablesCopied: copyable.length, rowsCopied }
   }
 
-  async #getTableNames(schema: string): Promise<string[]> {
-    const result = await db.rawQuery(
+  async #getTableNames(schema: string, conn?: QueryClientContract): Promise<string[]> {
+    const runner = conn ?? db
+    const result = await runner.rawQuery(
       `SELECT tablename FROM pg_tables WHERE schemaname = ? ORDER BY tablename`,
       [schema]
     )
@@ -111,9 +158,13 @@ export default class CloneService {
     schema: string,
     tables: string[]
   ): Promise<void> {
+    // Each setval is wrapped in a SAVEPOINT — without one, a single failure
+    // (table has no integer id column, sequence missing, etc.) would put the
+    // whole parent transaction into an aborted state, silently rolling back
+    // the row copy on COMMIT.
     for (const table of tables) {
-      try {
-        await trx.rawQuery(
+      await this.#runWithSavepoint(trx, `seq_${table}`, () =>
+        trx.rawQuery(
           `DO $$
            DECLARE
              seq text;
@@ -128,17 +179,29 @@ export default class CloneService {
            END $$`,
           [schema, table]
         )
-      } catch {
-        /* table has no integer id column */
-      }
+      )
     }
   }
 
   async #clearAccessTokens(trx: TransactionClientContract, schema: string): Promise<void> {
+    await this.#runWithSavepoint(trx, 'clear_tokens', () =>
+      trx.rawQuery(`TRUNCATE TABLE "${schema}"."auth_access_tokens"`)
+    )
+  }
+
+  async #runWithSavepoint(
+    trx: TransactionClientContract,
+    name: string,
+    op: () => Promise<unknown>
+  ): Promise<void> {
+    const sp = `sp_${name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 40)}`
+    await trx.rawQuery(`SAVEPOINT ${sp}`)
     try {
-      await trx.rawQuery(`TRUNCATE TABLE "${schema}"."auth_access_tokens"`)
-    } catch {
-      /* table may not exist */
+      await op()
+      await trx.rawQuery(`RELEASE SAVEPOINT ${sp}`)
+    } catch (err) {
+      await trx.rawQuery(`ROLLBACK TO SAVEPOINT ${sp}`)
+      logger.warn({ savepoint: sp, err: (err as Error).message }, 'Clone: savepoint rolled back')
     }
   }
 }

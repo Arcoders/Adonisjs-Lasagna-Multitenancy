@@ -29,7 +29,7 @@ export default {
     threshold: 50,
     resetTimeout: 30_000,
     rollingCountTimeout: 10_000,
-    volumeThreshold: 2,
+    volumeThreshold: 10,
   },
 
   queue: {

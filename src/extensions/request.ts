@@ -1,5 +1,9 @@
 import { TENANT_REPOSITORY } from '../types/contracts.js'
-import type { TenantRepositoryContract, TenantModelContract } from '../types/contracts.js'
+import type {
+  TenantRepositoryContract,
+  TenantModelContract,
+  TenantMetadata,
+} from '../types/contracts.js'
 import MissingTenantHeaderException from '../exceptions/missing_tenant_header_exception.js'
 import TenantNotFoundException from '../exceptions/tenant_not_found_exception.js'
 import { getConfig } from '../config.js'
@@ -9,7 +13,7 @@ import assert from 'node:assert'
 
 declare module '@adonisjs/core/http' {
   interface HttpRequest {
-    tenant(): Promise<TenantModelContract>
+    tenant<TMeta extends object = TenantMetadata>(): Promise<TenantModelContract<TMeta>>
   }
 }
 
@@ -39,6 +43,14 @@ export function resolveTenantId(request: HttpRequest): string | undefined {
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const TENANT_MEMO_KEY = Symbol('resolved_tenant')
+
+/**
+ * Internal helper to seed the tenant memo on a request without going through
+ * the resolver. Consumed by `@adonisjs-lasagna/multitenancy/testing`.
+ */
+export function __setMemoizedTenant(request: HttpRequest, tenant: TenantModelContract): void {
+  ;(request as any)[TENANT_MEMO_KEY] = tenant
+}
 
 ;(HttpRequest as any).macro('tenant', async function (this: HttpRequest) {
   if ((this as any)[TENANT_MEMO_KEY]) {

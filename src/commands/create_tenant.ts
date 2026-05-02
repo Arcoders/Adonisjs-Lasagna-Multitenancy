@@ -4,6 +4,7 @@ import app from '@adonisjs/core/services/app'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
 import InstallTenant from '../jobs/install_tenant.js'
+import TenantCreated from '../events/tenant_created.js'
 
 export default class CreateTenant extends BaseCommand {
   static readonly commandName = 'tenant:create'
@@ -27,6 +28,7 @@ export default class CreateTenant extends BaseCommand {
         try {
           const tenant = await repo.create({ name: this.name, email: this.email, status: 'provisioning' })
           createdTenantId = tenant.id
+          await TenantCreated.dispatch(tenant)
           t.update(`Tenant created — ID: ${tenant.id}`)
           return 'completed'
         } catch (error) {

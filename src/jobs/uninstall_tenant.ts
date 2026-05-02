@@ -5,6 +5,9 @@ import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
 import TenantQueueService from '../services/tenant_queue_service.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
+import HookRegistry from '../services/hook_registry.js'
+import TenantLogContext from '../services/tenant_log_context.js'
+import TenantDeleted from '../events/tenant_deleted.js'
 
 interface UninstallTenantPayload {
   tenantId: string
@@ -13,15 +16,24 @@ interface UninstallTenantPayload {
 export default class UninstallTenant extends Job<UninstallTenantPayload> {
   async execute(): Promise<void> {
     const { tenantId } = this.payload
-    const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
-    const tenant = await repo.findByIdOrFail(tenantId, true)
-    logger.info({ tenantId: tenant.id }, 'Uninstalling tenant schema')
+    const logCtx = await app.container.make(TenantLogContext)
+    return logCtx.run({ tenantId }, async () => {
+      const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
+      const tenant = await repo.findByIdOrFail(tenantId, true)
+      const hooks = await app.container.make(HookRegistry)
 
-    await new TenantQueueService().destroy(tenant.id)
-    await new CircuitBreakerService().destroy(tenant.id)
+      logger.info({ tenantId: tenant.id }, 'Uninstalling tenant schema')
+      await hooks.run('before', 'destroy', { tenant })
 
-    await tenant.uninstall()
-    logger.info({ tenantId: tenant.id }, 'Tenant uninstalled successfully')
+      await new TenantQueueService().destroy(tenant.id)
+      await new CircuitBreakerService().destroy(tenant.id)
+
+      await tenant.uninstall()
+      logger.info({ tenantId: tenant.id }, 'Tenant uninstalled successfully')
+
+      await hooks.run('after', 'destroy', { tenant })
+      await TenantDeleted.dispatch(tenant)
+    })
   }
 
   async failed(error: Error): Promise<void> {

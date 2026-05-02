@@ -3,3 +3,4 @@ export { default as TenantNotFoundException } from './tenant_not_found_exception
 export { default as TenantSuspendedException } from './tenant_suspended_exception.js'
 export { default as TenantNotReadyException } from './tenant_not_ready_exception.js'
 export { default as CircuitOpenException } from './circuit_open_exception.js'
+export { default as QuotaExceededException } from './quota_exceeded_exception.js'

@@ -71,7 +71,8 @@
       "namespace": "tenant",
       "aliases": [],
       "flags": [
-        { "name": "force", "flagName": "force", "required": false, "type": "boolean", "alias": "y", "description": "Skip confirmation prompt" }
+        { "name": "force", "flagName": "force", "required": false, "type": "boolean", "alias": "y", "description": "Skip confirmation prompt" },
+        { "name": "keepSchema", "flagName": "keep-schema", "required": false, "type": "boolean", "description": "Soft-delete only — preserve the tenant schema for the retention window" }
       ],
       "args": [
         { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID to destroy", "type": "string" }
@@ -254,6 +255,83 @@
       ],
       "options": { "startApp": true },
       "filePath": "tenant_metrics_flush.js"
+    },
+    {
+      "commandName": "tenant:doctor",
+      "description": "Diagnose tenancy state — schema drift, migrations, circuits, queues, backups, stalled provisioning, failed tenants",
+      "help": "Use --check=list to list available checks. Use --fix to auto-repair fixable issues.",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenant", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Limit checks to one or more tenant IDs" },
+        { "name": "check", "flagName": "check", "required": false, "type": "array", "description": "Run only the named check(s); pass --check=list to print available checks" },
+        { "name": "fix", "flagName": "fix", "required": false, "type": "boolean", "description": "Apply auto-fix for fixable issues" },
+        { "name": "json", "flagName": "json", "required": false, "type": "boolean", "description": "Emit a JSON report on stdout instead of the table" },
+        { "name": "watch", "flagName": "watch", "required": false, "type": "boolean", "alias": "w", "description": "Re-run continuously and redraw a compact dashboard every --interval ms" },
+        { "name": "interval", "flagName": "interval", "required": false, "type": "number", "description": "Refresh interval in ms when --watch is set (default 5000, min 1000)" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_doctor.js"
+    },
+    {
+      "commandName": "tenant:backups:run",
+      "description": "Run scheduled backups for tenants whose tier interval has elapsed, then apply retention. Idempotent — safe to run from cron.",
+      "help": "Suggested cron: 0 * * * * node ace tenant:backups:run",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenant", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Limit the run to one or more tenant IDs" },
+        { "name": "force", "flagName": "force", "required": false, "type": "boolean", "description": "Ignore tier intervalHours; back up every selected tenant" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "Report what would happen without backing up or deleting anything" },
+        { "name": "noRetention", "flagName": "no-retention", "required": false, "type": "boolean", "description": "Skip the retention sweep (keep all archives untouched)" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_backups_run.js"
+    },
+    {
+      "commandName": "tenant:seed",
+      "description": "Run Lucid seeders against one or more tenant schemas (delegates to db:seed per tenant)",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenant", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant ID(s) to seed; omit to seed every active tenant" },
+        { "name": "files", "flagName": "files", "required": false, "type": "array", "alias": "f", "description": "Cherry-pick seeder file(s) by relative path; passed through to db:seed" },
+        { "name": "continueOnError", "flagName": "continue-on-error", "required": false, "type": "boolean", "description": "Keep seeding remaining tenants when one fails" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_seed.js"
+    },
+    {
+      "commandName": "tenant:repl",
+      "description": "Open a REPL with tenant, db, audit, metrics and the rest of the satellite services preloaded",
+      "help": "",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [],
+      "args": [
+        { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID to load into the REPL context", "type": "string" }
+      ],
+      "options": { "startApp": true, "staysAlive": true },
+      "filePath": "tenant_repl.js"
+    },
+    {
+      "commandName": "tenant:purge-expired",
+      "description": "Drop schemas of soft-deleted tenants whose retention window has elapsed. Idempotent — safe to run from cron.",
+      "help": "Suggested cron: 0 3 * * * node ace tenant:purge-expired --force",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "retentionDays", "flagName": "retention-days", "required": false, "type": "number", "description": "Override config.softDelete.retentionDays for this run" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "Report what would be purged without dropping anything" },
+        { "name": "force", "flagName": "force", "required": false, "type": "boolean", "alias": "y", "description": "Skip the confirmation prompt" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_purge_expired.js"
     }
   ],
   "version": 1
