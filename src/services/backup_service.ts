@@ -32,7 +32,12 @@ export interface BackupMetadata {
   schema: string
 }
 
-const FILE_PATTERN = /^[a-z0-9_-]+\.dump$/
+// Accept the filenames our own producer writes:
+//   tenant_<uuid>_<ISO timestamp with `:` / `.` rewritten to `-`>.dump
+// e.g. tenant_abcd_2026-05-02T16-16-36-264Z.dump
+// Path traversal (`/`, `\`, `..`) is still rejected by virtue of not being in
+// the character class.
+const FILE_PATTERN = /^[A-Za-z0-9._-]+\.dump$/
 
 export default class BackupService {
   private getBackupDir(tenantId: string): string {

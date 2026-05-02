@@ -28,6 +28,11 @@ export default class CloneService {
     try {
       await destination.install()
 
+      // `install()` creates the schema and the connection but doesn't run
+      // tenant migrations. Run them now so the destination has the same DDL
+      // as the source before we copy rows into it.
+      await destination.migrate({ direction: 'up' })
+
       let tablesCopied = 0
       let rowsCopied = 0
 
