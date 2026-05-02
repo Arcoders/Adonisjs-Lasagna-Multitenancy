@@ -17,15 +17,7 @@
     "rewriteRelativeImportExtensions": true,
     "noEmit": true,
     "outDir": "./build",
-    "rootDir": "./",
-    "baseUrl": "./",
-    "paths": {
-      "#config/*": ["./config/*.js"],
-      "#app/*": ["./app/*.js"],
-      "#start/*": ["./start/*.js"],
-      "#database/*": ["./database/*.js"],
-      "#tests/*": ["./tests/*.js"]
-    }
+    "rootDir": "./"
   },
   "include": ["**/*.ts"],
   "exclude": ["node_modules", "build"]
