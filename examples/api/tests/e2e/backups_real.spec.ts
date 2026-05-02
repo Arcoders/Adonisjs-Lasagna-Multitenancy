@@ -226,8 +226,16 @@ test.group('e2e — backup, restore, import, clone (real)', (group) => {
       .firstOrFail()
     assert.equal(dest.status, 'active', 'destination should be active after clone')
 
-    const conn = dest.getConnection()
-    const result = await conn.rawQuery('SELECT count(*)::int AS n FROM notes')
+    // Read through the same connection the clone wrote on (central, fully
+    // qualified schema). Reading via dest.getConnection() returns a pooled
+    // session that may have been idle through the clone with stale prepared
+    // statements / relation cache, which is what produced the 0-row read on
+    // CI even though the data was committed.
+    const dbSvc = (await import('@adonisjs/lucid/services/db')).default
+    const central = dbSvc.connection('public')
+    const result = await central.rawQuery(
+      `SELECT count(*)::int AS n FROM "${dest.schemaName}".notes`
+    )
     assert.equal(result.rows[0].n, 5, 'cloned schema should carry the source rows')
   })
 
@@ -255,8 +263,11 @@ test.group('e2e — backup, restore, import, clone (real)', (group) => {
     const dest = await Tenant.query()
       .where('email', `struct-${stamp}@e2e.test`)
       .firstOrFail()
-    const conn = dest.getConnection()
-    const result = await conn.rawQuery('SELECT count(*)::int AS n FROM notes')
+    const dbSvc = (await import('@adonisjs/lucid/services/db')).default
+    const central = dbSvc.connection('public')
+    const result = await central.rawQuery(
+      `SELECT count(*)::int AS n FROM "${dest.schemaName}".notes`
+    )
     assert.equal(result.rows[0].n, 0, '--schema-only should leave the destination empty')
   })
 

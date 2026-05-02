@@ -46,6 +46,16 @@ export default class CloneService {
         rowsCopied = result.rowsCopied
       }
 
+      // The destination's pooled connection was opened during install() —
+      // BEFORE migrations created any tables and BEFORE the central
+      // connection committed the row copy. PostgreSQL caches relation OIDs
+      // and prepared statement plans per session, so leaving that pool
+      // around can cause subsequent reads to see an empty (or missing)
+      // notes table even though the data is committed. Closing the
+      // connection forces the next getConnection() call to open a fresh
+      // session with a clean catalog view.
+      await destination.closeConnection().catch(() => {})
+
       logger.info(
         { sourceId: source.id, destId: destination.id, tablesCopied, rowsCopied },
         'Tenant clone completed'
