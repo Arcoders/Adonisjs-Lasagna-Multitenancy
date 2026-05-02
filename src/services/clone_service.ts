@@ -1,9 +1,6 @@
 import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
-import type {
-  QueryClientContract,
-  TransactionClientContract,
-} from '@adonisjs/lucid/types/database'
+import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { getConfig } from '../config.js'
 import type { TenantModelContract } from '../types/contracts.js'
 
@@ -161,9 +158,13 @@ export default class CloneService {
     schema: string,
     tables: string[]
   ): Promise<void> {
+    // Each setval is wrapped in a SAVEPOINT — without one, a single failure
+    // (table has no integer id column, sequence missing, etc.) would put the
+    // whole parent transaction into an aborted state, silently rolling back
+    // the row copy on COMMIT.
     for (const table of tables) {
-      try {
-        await trx.rawQuery(
+      await this.#runWithSavepoint(trx, `seq_${table}`, () =>
+        trx.rawQuery(
           `DO $$
            DECLARE
              seq text;
@@ -178,17 +179,29 @@ export default class CloneService {
            END $$`,
           [schema, table]
         )
-      } catch {
-        /* table has no integer id column */
-      }
+      )
     }
   }
 
   async #clearAccessTokens(trx: TransactionClientContract, schema: string): Promise<void> {
+    await this.#runWithSavepoint(trx, 'clear_tokens', () =>
+      trx.rawQuery(`TRUNCATE TABLE "${schema}"."auth_access_tokens"`)
+    )
+  }
+
+  async #runWithSavepoint(
+    trx: TransactionClientContract,
+    name: string,
+    op: () => Promise<unknown>
+  ): Promise<void> {
+    const sp = `sp_${name.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 40)}`
+    await trx.rawQuery(`SAVEPOINT ${sp}`)
     try {
-      await trx.rawQuery(`TRUNCATE TABLE "${schema}"."auth_access_tokens"`)
-    } catch {
-      /* table may not exist */
+      await op()
+      await trx.rawQuery(`RELEASE SAVEPOINT ${sp}`)
+    } catch (err) {
+      await trx.rawQuery(`ROLLBACK TO SAVEPOINT ${sp}`)
+      logger.warn({ savepoint: sp, err: (err as Error).message }, 'Clone: savepoint rolled back')
     }
   }
 }
