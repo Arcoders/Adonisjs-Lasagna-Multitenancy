@@ -32,6 +32,7 @@
     "@adonisjs/queue": "^0.6.0",
     "@adonisjs/redis": "^10.0.0",
     "@poppinss/ts-exec": "^1.4.4",
+    "@vinejs/vine": "^4.1.0",
     "luxon": "^3.0.0",
     "nodemailer": "^7.0.0",
     "pg": "^8.13.0",

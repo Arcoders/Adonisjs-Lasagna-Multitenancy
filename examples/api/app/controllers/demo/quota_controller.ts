@@ -1,13 +1,16 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { QuotaService } from '@adonisjs-lasagna/multitenancy/services'
+import { trackQuotaValidator } from '#app/validators/quota_validator'
 import type { DemoMeta } from '#app/models/backoffice/tenant'
 
 const quota = new QuotaService()
 
 /**
- * Two routes that demystify the quota story:
- *  - GET  /demo/quota/state     → snapshot of plan + limits + current usage
- *  - POST /demo/quota/track     → bump a rolling counter without blocking
+ * - GET  /demo/quota/state  → resolved plan + limits + current usage
+ * - POST /demo/quota/track  → bump a rolling counter (does not enforce)
+ *
+ * The blocking variant lives on `POST /demo/notes` via the
+ * `enforceQuota('apiCallsPerDay')` middleware in `start/routes.ts`.
  */
 export default class QuotaController {
   async state({ request, response }: HttpContext) {
@@ -18,11 +21,8 @@ export default class QuotaController {
 
   async track({ request, response }: HttpContext) {
     const tenant = await request.tenant<DemoMeta>()
-    const body = request.body() as { quota?: string; amount?: number }
-    if (!body.quota) {
-      return response.badRequest({ error: { message: 'quota name is required' } })
-    }
-    const next = await quota.track(tenant, body.quota, body.amount ?? 1)
-    return response.ok({ quota: body.quota, current: next })
+    const payload = await request.validateUsing(trackQuotaValidator)
+    const current = await quota.track(tenant, payload.quota, payload.amount ?? 1)
+    return response.ok({ quota: payload.quota, current })
   }
 }

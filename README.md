@@ -824,6 +824,7 @@ The webhook delivery test is worth a look. [tests/e2e/webhooks_delivery.spec.ts]
 
 Every claim in this README is backed by a curl recipe and a test in [examples/api/](examples/api/). The folder is a real AdonisJS 7 app with:
 
+- A v7-idiomatic layout: thin controllers, a [services](examples/api/app/services/) layer, [VineJS validators](examples/api/app/validators/) (422 on invalid input), and event side-effects in [app/listeners/](examples/api/app/listeners/) registered from `AppProvider.ready()` — `start/routes.ts` is route declarations only
 - All 11 lifecycle event listeners writing to the audit log
 - Three demo controllers for the satellites (feature flags, branding, SSO)
 - A welcome email mailer fired from `TenantActivated`, captured by MailCatcher

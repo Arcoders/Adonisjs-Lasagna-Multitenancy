@@ -8,14 +8,17 @@ If something in the package is broken, this app refuses to boot or the suite tur
 
 ```
 examples/api
-├── adonisrc.ts              # providers, including @adonisjs/mail
+├── adonisrc.ts              # providers, including @adonisjs/mail and vinejs
 ├── app
-│   ├── controllers/demo     # one controller per feature surface
+│   ├── controllers/demo     # thin: parse → validate → service → response
+│   ├── listeners            # audit_listener (11 events) + tenant_welcome_listener
 │   ├── mailers              # TenantWelcomeMail (fired on TenantActivated)
 │   ├── middleware           # demo admin auth, tenant guard wiring
 │   ├── models/backoffice    # Tenant + DemoMeta, getReadConnection override
-│   ├── providers            # binds TenantRepository + DoctorService checks
-│   └── repositories         # Lucid backed TenantRepositoryContract
+│   ├── providers            # binds TenantRepository, DoctorService, registers listeners
+│   ├── repositories         # Lucid backed TenantRepositoryContract
+│   ├── services             # tenants_service + notes_service (controller-side logic)
+│   └── validators           # VineJS schemas, one file per resource
 ├── config
 │   ├── database.ts          # central + backoffice + tenant template
 │   ├── mail.ts              # SMTP transport pointed at MailCatcher
@@ -31,6 +34,14 @@ examples/api
     ├── fixtures               # demo-tenant.sql, used by import + restore
     └── bootstrap.ts
 ```
+
+The split is deliberate: controllers stay under ~10 lines per method, business logic
+lives in [app/services/](app/services/), input shape lives in [app/validators/](app/validators/)
+(VineJS surfaces failures as `422` automatically), and event side-effects live in
+[app/listeners/](app/listeners/) — registered from `AppProvider.ready()`, not from
+`start/routes.ts`. The route file is 79 lines and contains route declarations only,
+with lazy class handlers so `@inject()`-decorated controllers pick up their
+constructor dependencies from the IoC container.
 
 ## Run the whole suite
 
@@ -151,16 +162,23 @@ curl -H "x-tenant-id: $TENANT_ID" http://localhost:3333/demo/circuit
 
 ### 4. Lifecycle hooks plus all 11 events
 
-The `beforeProvision` hook in [config/multitenancy.ts](config/multitenancy.ts) rejects emails that don't end in `.test`. That same hook can run schema bootstrap, seed initial data, or wire OAuth tenants. It runs inside the `InstallTenant` job, which means a thrown hook flips the tenant to `failed`.
+The `beforeProvision` hook in [config/multitenancy.ts](config/multitenancy.ts) rejects emails that don't end in `.test`. That same hook can run schema bootstrap, seed initial data, or wire OAuth tenants. It runs inside the `InstallTenant` job, which means a thrown hook flips the tenant to `failed` after the create endpoint has already returned `202`.
 
-The 11 events (`TenantCreated`, `TenantActivated`, `TenantSuspended`, `TenantProvisioned`, `TenantMigrated`, `TenantBackedUp`, `TenantRestored`, `TenantCloned`, `TenantUpdated`, `TenantDeleted`, `TenantQuotaExceeded`) all have listeners in [start/routes.ts](start/routes.ts) that write rows into `backoffice.tenant_audit_logs`. Read them back through [app/controllers/demo/audit_controller.ts](app/controllers/demo/audit_controller.ts).
+The 11 events (`TenantCreated`, `TenantActivated`, `TenantSuspended`, `TenantProvisioned`, `TenantMigrated`, `TenantBackedUp`, `TenantRestored`, `TenantCloned`, `TenantUpdated`, `TenantDeleted`, `TenantQuotaExceeded`) all have listeners in [app/listeners/audit_listener.ts](app/listeners/audit_listener.ts) that write rows into `backoffice.tenant_audit_logs`. The listener is registered from [app/providers/app_provider.ts](app/providers/app_provider.ts) on the `ready()` hook (the emitter is not available during `boot()`). Read the rows back through [app/controllers/demo/audit_controller.ts](app/controllers/demo/audit_controller.ts).
 
 ```bash
-# Reject path
+# Hook reject path: shape passes the validator (the .test rule is a business
+# rule, not a shape rule), creation is accepted, then InstallTenant throws
+# inside the job and the tenant flips to status=failed.
 curl -X POST http://localhost:3333/demo/tenants \
   -H 'content-type: application/json' \
   -d '{"name":"Bad","email":"bad@example.com"}'
-# 500, with the message from the hook
+# 202 → poll GET /demo/tenants/<id> and watch status flip to "failed"
+
+# Validator reject path (missing email): VineJS surfaces validation as 422
+curl -X POST http://localhost:3333/demo/tenants \
+  -H 'content-type: application/json' -d '{"name":"x"}'
+# 422 with structured error body
 
 # Read the audit trail
 curl -H "x-tenant-id: $TENANT_ID" http://localhost:3333/demo/audit | jq
@@ -319,7 +337,7 @@ node ace tenant:webhooks:retry
 
 ### 15. Email through MailCatcher
 
-Activating a tenant fires `TenantActivated`. A listener in [start/routes.ts](start/routes.ts) loads the tenant's branding row, builds [app/mailers/tenant_welcome_mail.ts](app/mailers/tenant_welcome_mail.ts), and queues it through `mail.sendLater`. MailCatcher captures the SMTP traffic, the web UI is at [http://localhost:1080](http://localhost:1080).
+Activating a tenant fires `TenantActivated`. The listener at [app/listeners/tenant_welcome_listener.ts](app/listeners/tenant_welcome_listener.ts) (registered from `AppProvider.ready()`) loads the tenant's branding row, builds [app/mailers/tenant_welcome_mail.ts](app/mailers/tenant_welcome_mail.ts), and ships it through `mail.send`. MailCatcher captures the SMTP traffic, the web UI is at [http://localhost:1080](http://localhost:1080).
 
 ```bash
 # Provision a branded tenant

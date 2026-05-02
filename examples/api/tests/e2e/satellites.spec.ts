@@ -81,7 +81,8 @@ test.group('e2e — satellites: feature flags, branding, SSO (HTTP)', (group) =>
       .post('/demo/feature-flags')
       .header('x-tenant-id', id)
       .json({ enabled: true })
-    r.assertStatus(400)
+    // VineJS surfaces validation failures as 422.
+    r.assertStatus(422)
   })
 
   // ─── Branding ────────────────────────────────────────────────────
@@ -176,7 +177,8 @@ test.group('e2e — satellites: feature flags, branding, SSO (HTTP)', (group) =>
       .put('/demo/sso')
       .header('x-tenant-id', id)
       .json({ clientId: 'only-id' })
-    r.assertStatus(400)
+    // VineJS surfaces validation failures as 422.
+    r.assertStatus(422)
   })
 
   test('SSO config row is queryable directly via the satellite model', async ({

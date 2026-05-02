@@ -11,9 +11,8 @@ export default class CircuitController {
   async state({ request, response }: HttpContext) {
     const tenant = await request.tenant()
     const svc = await app.container.make(CircuitBreakerService)
-    // Touch the connection to ensure the breaker exists for this tenant.
+    // Touch the connection so a breaker is materialised for this tenant.
     tenant.getConnection()
-    const metrics = svc.getMetrics(tenant.id)
-    return response.ok({ tenantId: tenant.id, metrics })
+    return response.ok({ tenantId: tenant.id, metrics: svc.getMetrics(tenant.id) })
   }
 }

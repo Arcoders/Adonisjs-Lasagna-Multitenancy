@@ -10,15 +10,18 @@ import { DoctorService } from '@adonisjs-lasagna/multitenancy/services'
 export default class DoctorController {
   async run({ request, response }: HttpContext) {
     const svc = await app.container.make(DoctorService)
-    const checks = request.input('check') as string | string[] | undefined
-    const tenants = request.input('tenant') as string | string[] | undefined
-
     const result = await svc.run({
-      checks: checks ? (Array.isArray(checks) ? checks : [checks]) : undefined,
-      tenants: tenants ? (Array.isArray(tenants) ? tenants : [tenants]) : undefined,
+      checks: toArray(request.input('check')),
+      tenants: toArray(request.input('tenant')),
       fix: request.input('fix') === 'true',
     })
-
     return response.ok(result)
   }
+}
+
+/** AdonisJS query parser returns string | string[] | undefined; normalise. */
+function toArray(value: unknown): string[] | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  if (Array.isArray(value)) return value.map(String)
+  return [String(value)]
 }

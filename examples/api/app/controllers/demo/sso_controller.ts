@@ -1,19 +1,13 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { SsoService } from '@adonisjs-lasagna/multitenancy/services'
+import { updateSsoValidator } from '#app/validators/sso_validator'
 
 const sso = new SsoService()
 
-interface SsoBody {
-  clientId?: string
-  clientSecret?: string
-  issuerUrl?: string
-  redirectUri?: string
-  scopes?: string[]
-}
-
 /**
  * Read / write tenant SSO config. The `clientSecret` is never echoed back —
- * we return a presence boolean only.
+ * we expose a `hasClientSecret` boolean so callers can tell whether one is
+ * stored without leaking the value.
  */
 export default class SsoController {
   async show({ request, response }: HttpContext) {
@@ -35,21 +29,13 @@ export default class SsoController {
 
   async update({ request, response }: HttpContext) {
     const tenant = await request.tenant()
-    const body = request.body() as SsoBody
-    const missing = ['clientId', 'clientSecret', 'issuerUrl', 'redirectUri'].filter(
-      (k) => !body[k as keyof SsoBody]
-    )
-    if (missing.length) {
-      return response.badRequest({
-        error: { message: `missing required fields: ${missing.join(', ')}` },
-      })
-    }
+    const payload = await request.validateUsing(updateSsoValidator)
     const row = await sso.upsertConfig(tenant.id, {
-      clientId: body.clientId!,
-      clientSecret: body.clientSecret!,
-      issuerUrl: body.issuerUrl!,
-      redirectUri: body.redirectUri!,
-      scopes: body.scopes,
+      clientId: payload.clientId,
+      clientSecret: payload.clientSecret,
+      issuerUrl: payload.issuerUrl,
+      redirectUri: payload.redirectUri,
+      scopes: payload.scopes,
     })
     return response.ok({
       tenantId: tenant.id,
