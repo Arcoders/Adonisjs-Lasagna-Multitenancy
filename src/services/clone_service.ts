@@ -98,19 +98,36 @@ export default class CloneService {
     // full database access.
     const conn = db.connection(getConfig().centralConnectionName)
 
-    const tables = await this.#getTableNames(srcSchema, conn)
-    const copyable = tables.filter((t) => !MIGRATION_TABLES.has(t))
+    const srcTables = await this.#getTableNames(srcSchema, conn)
+    const dstTables = await this.#getTableNames(dstSchema, conn)
+    const copyable = srcTables.filter((t) => !MIGRATION_TABLES.has(t))
+    const dstSet = new Set(dstTables)
+
+    logger.info(
+      { srcSchema, dstSchema, srcTables, dstTables, copyable },
+      'Clone: discovered tables before copy'
+    )
 
     let rowsCopied = 0
+    const perTable: Record<string, number> = {}
 
     await conn.transaction(async (trx) => {
       await trx.rawQuery(`SET LOCAL session_replication_role = replica`)
 
       for (const table of copyable) {
+        if (!dstSet.has(table)) {
+          logger.warn(
+            { srcSchema, dstSchema, table },
+            'Clone: destination missing table, skipping copy'
+          )
+          continue
+        }
         const result = await trx.rawQuery(
           `INSERT INTO "${dstSchema}"."${table}" SELECT * FROM "${srcSchema}"."${table}"`
         )
-        rowsCopied += (result as any).rowCount ?? 0
+        const n = (result as any).rowCount ?? 0
+        rowsCopied += n
+        perTable[table] = n
       }
 
       await trx.rawQuery(`SET LOCAL session_replication_role = DEFAULT`)
@@ -121,6 +138,11 @@ export default class CloneService {
 
       await this.#resetIntegerSequences(trx, dstSchema, copyable)
     })
+
+    logger.info(
+      { srcSchema, dstSchema, tablesCopied: copyable.length, rowsCopied, perTable },
+      'Clone: copy phase finished'
+    )
 
     return { tablesCopied: copyable.length, rowsCopied }
   }

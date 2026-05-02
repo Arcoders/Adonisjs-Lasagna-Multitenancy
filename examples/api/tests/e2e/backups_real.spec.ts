@@ -226,17 +226,42 @@ test.group('e2e — backup, restore, import, clone (real)', (group) => {
       .firstOrFail()
     assert.equal(dest.status, 'active', 'destination should be active after clone')
 
-    // Read through the same connection the clone wrote on (central, fully
-    // qualified schema). Reading via dest.getConnection() returns a pooled
-    // session that may have been idle through the clone with stale prepared
-    // statements / relation cache, which is what produced the 0-row read on
-    // CI even though the data was committed.
+    // Cross-check via three independent reads. If they disagree, the failure
+    // mode is observable instead of opaque. Past failures here have all
+    // looked identical (count = 0) so the only way to debug from CI is to
+    // know whether the data is actually missing or just hidden by
+    // connection-pool / search-path quirks.
     const dbSvc = (await import('@adonisjs/lucid/services/db')).default
     const central = dbSvc.connection('public')
-    const result = await central.rawQuery(
+
+    const viaCentral = await central.rawQuery(
       `SELECT count(*)::int AS n FROM "${dest.schemaName}".notes`
     )
-    assert.equal(result.rows[0].n, 5, 'cloned schema should carry the source rows')
+    const viaCentralFq = await central.rawQuery(
+      `SELECT count(*)::int AS n FROM "${dest.schemaName}"."notes"`
+    )
+    const tablesInDst = await central.rawQuery(
+      `SELECT tablename FROM pg_tables WHERE schemaname = ? ORDER BY tablename`,
+      [dest.schemaName]
+    )
+    const tablesInSrc = await central.rawQuery(
+      `SELECT tablename FROM pg_tables WHERE schemaname = ? ORDER BY tablename`,
+      [sourceTenant.schemaName]
+    )
+    const sourceVisible = await central.rawQuery(
+      `SELECT count(*)::int AS n FROM "${sourceTenant.schemaName}"."notes"`
+    )
+
+    assert.equal(
+      viaCentral.rows[0].n,
+      5,
+      `cloned schema should carry the source rows. ` +
+        `via central (unqual): ${viaCentral.rows[0].n}, ` +
+        `via central (quoted): ${viaCentralFq.rows[0].n}, ` +
+        `dst tables: ${tablesInDst.rows.map((r: any) => r.tablename).join(',')}, ` +
+        `src tables: ${tablesInSrc.rows.map((r: any) => r.tablename).join(',')}, ` +
+        `src.notes count via central: ${sourceVisible.rows[0].n}`
+    )
   })
 
   test('tenant:clone --schema-only copies structure but no rows', async ({ client, assert }) => {
