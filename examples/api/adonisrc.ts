@@ -19,6 +19,7 @@ export default defineConfig({
     () => import('@adonisjs/redis/redis_provider'),
     () => import('@adonisjs/queue/queue_provider'),
     () => import('@adonisjs/mail/mail_provider'),
+    () => import('@adonisjs/core/providers/vinejs_provider'),
     () => import('@adonisjs-lasagna/multitenancy/providers/multitenancy_provider'),
     () => import('#app/providers/app_provider'),
   ],

@@ -1,12 +1,13 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { FeatureFlagService } from '@adonisjs-lasagna/multitenancy/services'
+import { setFlagValidator } from '#app/validators/flags_validator'
 
 const flags = new FeatureFlagService()
 
 /**
- * Per-tenant feature flag CRUD. Demonstrates `FeatureFlagService` from the
- * package. Real apps would expose this via an admin UI; the demo route is
- * deliberately bare.
+ * Per-tenant feature flag CRUD. Real apps expose this via an admin UI; the
+ * demo route is deliberately bare so the `FeatureFlagService` surface stays
+ * visible.
  */
 export default class FeatureFlagsController {
   async list({ request, response }: HttpContext) {
@@ -24,16 +25,9 @@ export default class FeatureFlagsController {
 
   async set({ request, response }: HttpContext) {
     const tenant = await request.tenant()
-    const body = request.body() as {
-      flag?: string
-      enabled?: boolean
-      config?: Record<string, unknown>
-    }
-    if (!body.flag) {
-      return response.badRequest({ error: { message: 'flag is required' } })
-    }
-    const enabled = body.enabled !== false
-    const row = await flags.set(tenant.id, body.flag, enabled, body.config)
+    const payload = await request.validateUsing(setFlagValidator)
+    const enabled = payload.enabled !== false
+    const row = await flags.set(tenant.id, payload.flag, enabled, payload.config)
     return response.created({
       tenantId: tenant.id,
       flag: row.flag,

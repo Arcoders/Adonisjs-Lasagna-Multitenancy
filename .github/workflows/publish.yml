@@ -22,8 +22,12 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
+      # Repo .npmrc sets `ignore-scripts=true` for local-dev safety; CI needs
+      # esbuild's postinstall to run so the platform binary lands on disk.
       - name: Install dependencies
-        run: npm install
+        env:
+          npm_config_ignore_scripts: 'false'
+        run: npm install --include=optional
 
       - name: Typecheck
         run: npm run typecheck
