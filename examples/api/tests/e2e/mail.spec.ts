@@ -1,7 +1,12 @@
 import { test } from '@japa/runner'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { BrandingService } from '@adonisjs-lasagna/multitenancy/services'
-import { createInstalledTenant, dropAllTenants, waitFor } from './_helpers.js'
+import {
+  createInstalledTenant,
+  dropAllTenants,
+  installInline,
+  waitFor,
+} from './_helpers.js'
 
 const MAILCATCHER_HOST = process.env.MAILCATCHER_HOST ?? '127.0.0.1'
 const MAILCATCHER_HTTP = `http://${MAILCATCHER_HOST}:1080`
@@ -187,35 +192,37 @@ test.group('e2e — mail (MailCatcher)', (group) => {
       return
     }
 
-    const t = await createInstalledTenant(client, {
+    // Create the tenant row WITHOUT activating yet, so the welcome email
+    // hasn't fired with the default branding. Upsert branding, then run
+    // installInline so TenantActivated fires once with branding already
+    // persisted — single email, deterministic content.
+    const create = await client.post('/demo/tenants').json({
       name: 'Branded Tenant',
       email: 'branded@e2e.test',
+      plan: 'pro',
+      tier: 'premium',
     })
+    create.assertStatus(202)
+    const id = create.body().tenantId as string
 
-    // Pre-seed branding before activation. installInline already activated
-    // the tenant in createInstalledTenant — trigger a SECOND activation
-    // event after persisting branding so the listener picks it up.
     const branding = new BrandingService()
-    await branding.upsert(t.id, {
+    await branding.upsert(id, {
       fromName: 'BrandedCo',
       fromEmail: 'no-reply@brandedco.test',
       primaryColor: '#FF00FF',
       supportUrl: 'https://brandedco.test/help',
     })
 
-    // Re-fire the activation event so the listener picks up the branding.
-    const { TenantActivated } = await import('@adonisjs-lasagna/multitenancy/events')
-    const Tenant = (await import('#app/models/backoffice/tenant')).default
-    const tenant = await Tenant.findOrFail(t.id)
     await clearMessages()
-    await TenantActivated.dispatch(tenant as any)
+    const status = await installInline(id)
+    assert.equal(status, 'active')
 
     const msg = await waitFor(
       async () => {
         const msgs = await listMessages()
         return msgs.find((m) => m.recipients.some((r) => r.includes('branded@e2e.test')))
       },
-      { timeoutMs: 6000 }
+      { timeoutMs: 6000, description: 'branded welcome email never arrived' }
     )
 
     const html = await getHtml(msg.id)
@@ -241,28 +248,42 @@ test.group('e2e — mail (MailCatcher)', (group) => {
       return
     }
 
-    const t1 = await createInstalledTenant(client, { name: 'OneCo', email: 't1@e2e.test' })
-    const t2 = await createInstalledTenant(client, { name: 'TwoCo', email: 't2@e2e.test' })
+    // Create both tenants without activating, upsert each one's branding,
+    // THEN activate. Each tenant fires exactly one TenantActivated event
+    // with its own branding in place — no race with the queue or the cache.
+    const c1 = await client.post('/demo/tenants').json({
+      name: 'OneCo',
+      email: 't1@e2e.test',
+      plan: 'pro',
+      tier: 'premium',
+    })
+    c1.assertStatus(202)
+    const id1 = c1.body().tenantId as string
+
+    const c2 = await client.post('/demo/tenants').json({
+      name: 'TwoCo',
+      email: 't2@e2e.test',
+      plan: 'pro',
+      tier: 'premium',
+    })
+    c2.assertStatus(202)
+    const id2 = c2.body().tenantId as string
 
     const branding = new BrandingService()
-    await branding.upsert(t1.id, {
+    await branding.upsert(id1, {
       fromName: 'OneCo-Brand',
       fromEmail: 'one@oneco.test',
       primaryColor: '#111111',
     })
-    await branding.upsert(t2.id, {
+    await branding.upsert(id2, {
       fromName: 'TwoCo-Brand',
       fromEmail: 'two@twoco.test',
       primaryColor: '#222222',
     })
 
-    const { TenantActivated } = await import('@adonisjs-lasagna/multitenancy/events')
-    const Tenant = (await import('#app/models/backoffice/tenant')).default
     await clearMessages()
-    const m1 = await Tenant.findOrFail(t1.id)
-    const m2 = await Tenant.findOrFail(t2.id)
-    await TenantActivated.dispatch(m1 as any)
-    await TenantActivated.dispatch(m2 as any)
+    assert.equal(await installInline(id1), 'active')
+    assert.equal(await installInline(id2), 'active')
 
     await waitFor(async () => (await listMessages()).length >= 2, {
       timeoutMs: 6000,

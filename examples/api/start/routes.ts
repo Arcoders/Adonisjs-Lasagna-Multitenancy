@@ -53,7 +53,11 @@ emitter.on(TenantActivated, async ({ tenant }) => {
     const svc = new BrandingService()
     const row = await svc.getForTenant(tenant.id)
     const ctx = svc.renderEmailContext(row)
-    await mail.sendLater(
+    // `mail.send` (synchronous) keeps the demo runnable without a queue
+    // worker subprocess. Production consumers can swap to `mail.sendLater`
+    // in their own listener; the queued path is exercised by the dedicated
+    // queue test in tests/e2e/mail.spec.ts which spawns its own worker.
+    await mail.send(
       new TenantWelcomeMail(
         { id: tenant.id, name: tenant.name, email: tenant.email },
         {
