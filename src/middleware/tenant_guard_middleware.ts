@@ -3,6 +3,7 @@ import CircuitOpenException from '../exceptions/circuit_open_exception.js'
 import TenantNotReadyException from '../exceptions/tenant_not_ready_exception.js'
 import TenantSuspendedException from '../exceptions/tenant_suspended_exception.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
+import TenantLogContext from '../services/tenant_log_context.js'
 import app from '@adonisjs/core/services/app'
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
@@ -28,6 +29,7 @@ export default class TenantGuardMiddleware {
       throw new CircuitOpenException()
     }
 
-    return next()
+    const logCtx = await app.container.make(TenantLogContext)
+    return logCtx.run({ tenantId: tenant.id }, () => next())
   }
 }

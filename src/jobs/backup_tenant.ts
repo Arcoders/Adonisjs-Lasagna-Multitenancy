@@ -4,6 +4,9 @@ import logger from '@adonisjs/core/services/logger'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
 import BackupService from '../services/backup_service.js'
+import HookRegistry from '../services/hook_registry.js'
+import TenantLogContext from '../services/tenant_log_context.js'
+import TenantBackedUp from '../events/tenant_backed_up.js'
 
 interface BackupTenantPayload {
   tenantId: string
@@ -12,13 +15,22 @@ interface BackupTenantPayload {
 export default class BackupTenant extends Job<BackupTenantPayload> {
   async execute(): Promise<void> {
     const { tenantId } = this.payload
-    const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
-    const tenant = await repo.findByIdOrFail(tenantId)
-    logger.info({ tenantId: tenant.id }, 'Starting tenant backup')
+    const logCtx = await app.container.make(TenantLogContext)
+    return logCtx.run({ tenantId }, async () => {
+      const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
+      const tenant = await repo.findByIdOrFail(tenantId)
+      const hooks = await app.container.make(HookRegistry)
 
-    const meta = await new BackupService().backup(tenant)
+      logger.info({ tenantId: tenant.id }, 'Starting tenant backup')
+      await hooks.run('before', 'backup', { tenant })
 
-    logger.info({ tenantId: tenant.id, file: meta.file }, 'Tenant backup completed')
+      const meta = await new BackupService().backup(tenant)
+
+      logger.info({ tenantId: tenant.id, file: meta.file }, 'Tenant backup completed')
+
+      await hooks.run('after', 'backup', { tenant, metadata: meta })
+      await TenantBackedUp.dispatch(tenant, meta)
+    })
   }
 
   async failed(error: Error): Promise<void> {

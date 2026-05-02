@@ -3,6 +3,8 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
 import app from '@adonisjs/core/services/app'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract, TenantModelContract } from '../types/contracts.js'
+import HookRegistry from '../services/hook_registry.js'
+import TenantMigrated from '../events/tenant_migrated.js'
 
 export default class RollbackTenantMigrations extends BaseCommand {
   static readonly commandName = 'migration:tenant:rollback'
@@ -40,6 +42,7 @@ export default class RollbackTenantMigrations extends BaseCommand {
 
   private async migrateTenant(tenant: TenantModelContract) {
     const tasks = this.ui.tasks({ verbose: this.verbose })
+    const hooks = await app.container.make(HookRegistry)
 
     await tasks
       .add(`Rolling back tenant "${tenant.name}": schema (${tenant.schemaName})`, async (task) => {
@@ -47,12 +50,21 @@ export default class RollbackTenantMigrations extends BaseCommand {
           task.update('Connecting to the tenant database')
           tenant.getConnection()
 
+          if (!this.dryRun) {
+            await hooks.run('before', 'migrate', { tenant, direction: 'down' })
+          }
+
           task.update('Rolling back last migration')
           await tenant.migrate({
             direction: 'down',
             disableLocks: this.disableLocks,
             dryRun: this.dryRun,
           })
+
+          if (!this.dryRun) {
+            await hooks.run('after', 'migrate', { tenant, direction: 'down' })
+            await TenantMigrated.dispatch(tenant, 'down')
+          }
 
           return 'completed'
         } catch (error) {

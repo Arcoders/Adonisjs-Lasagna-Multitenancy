@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "rewriteRelativeImportExtensions": true,
+    "noEmit": true,
+    "outDir": "./build",
+    "rootDir": "./",
+    "baseUrl": "./",
+    "paths": {
+      "#config/*": ["./config/*.js"],
+      "#app/*": ["./app/*.js"],
+      "#start/*": ["./start/*.js"],
+      "#database/*": ["./database/*.js"],
+      "#tests/*": ["./tests/*.js"]
+    }
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "build"]
+}

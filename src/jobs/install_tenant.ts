@@ -4,6 +4,9 @@ import logger from '@adonisjs/core/services/logger'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
 import TenantQueueService from '../services/tenant_queue_service.js'
+import HookRegistry from '../services/hook_registry.js'
+import TenantLogContext from '../services/tenant_log_context.js'
+import TenantProvisioned from '../events/tenant_provisioned.js'
 
 interface InstallTenantPayload {
   tenantId: string
@@ -12,14 +15,24 @@ interface InstallTenantPayload {
 export default class InstallTenant extends Job<InstallTenantPayload> {
   async execute(): Promise<void> {
     const { tenantId } = this.payload
-    const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
-    const tenant = await repo.findByIdOrFail(tenantId)
-    logger.info({ tenantId: tenant.id }, 'Provisioning tenant schema')
-    await tenant.install()
-    logger.info({ tenantId: tenant.id }, 'Tenant provisioned successfully')
+    const logCtx = await app.container.make(TenantLogContext)
+    return logCtx.run({ tenantId }, async () => {
+      const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
+      const tenant = await repo.findByIdOrFail(tenantId)
+      const hooks = await app.container.make(HookRegistry)
 
-    new TenantQueueService().getOrCreate(tenant.id)
-    logger.info({ tenantId: tenant.id }, 'Tenant queue initialized')
+      logger.info({ tenantId: tenant.id }, 'Provisioning tenant schema')
+      await hooks.run('before', 'provision', { tenant })
+
+      await tenant.install()
+      logger.info({ tenantId: tenant.id }, 'Tenant provisioned successfully')
+
+      new TenantQueueService().getOrCreate(tenant.id)
+      logger.info({ tenantId: tenant.id }, 'Tenant queue initialized')
+
+      await hooks.run('after', 'provision', { tenant })
+      await TenantProvisioned.dispatch(tenant)
+    })
   }
 
   async failed(error: Error): Promise<void> {

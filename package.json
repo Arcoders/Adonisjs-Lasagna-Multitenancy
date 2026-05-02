@@ -25,6 +25,9 @@
   "engines": {
     "node": ">=24.0.0"
   },
+  "workspaces": [
+    "examples/api"
+  ],
   "files": [
     "build",
     "stubs"
@@ -42,7 +45,10 @@
     "./exceptions": "./build/src/exceptions/index.js",
     "./extensions/request": "./build/src/extensions/request.js",
     "./providers/multitenancy_provider": "./build/src/providers/multitenancy_provider.js",
-    "./commands": "./build/src/commands/main.js"
+    "./commands": "./build/src/commands/main.js",
+    "./testing": "./build/src/testing/index.js",
+    "./health": "./build/src/health/index.js",
+    "./admin": "./build/src/admin/index.js"
   },
   "typesVersions": {
     "*": {
@@ -81,6 +87,15 @@
       ],
       "commands": [
         "./build/src/commands/main.d.ts"
+      ],
+      "testing": [
+        "./build/src/testing/index.d.ts"
+      ],
+      "health": [
+        "./build/src/health/index.d.ts"
+      ],
+      "admin": [
+        "./build/src/admin/index.d.ts"
       ]
     }
   },
@@ -101,8 +116,8 @@
   "peerDependencies": {
     "@adonisjs/core": "^7.0.0",
     "@adonisjs/lucid": "^22.0.0",
-    "@adonisjs/redis": "^10.0.0",
     "@adonisjs/queue": "^0.6.0",
+    "@adonisjs/redis": "^10.0.0",
     "@aws-sdk/client-s3": "^3.0.0"
   },
   "peerDependenciesMeta": {
@@ -119,23 +134,24 @@
   },
   "prettier": "@adonisjs/prettier-config",
   "devDependencies": {
+    "@adonisjs/assembler": "^8.4.0",
     "@adonisjs/core": "^7.0.0",
-    "@adonisjs/lucid": "^22.0.0",
-    "@adonisjs/redis": "^10.0.0",
     "@adonisjs/eslint-config": "^2.0.0-beta.6",
+    "@adonisjs/lucid": "^22.0.0",
     "@adonisjs/prettier-config": "^1.4.0",
+    "@adonisjs/queue": "^0.6.0",
+    "@adonisjs/redis": "^10.0.0",
     "@adonisjs/tsconfig": "^1.4.0",
-    "eslint": "^9.20.0",
-    "prettier": "^3.4.2",
     "@japa/api-client": "^3.2.1",
     "@japa/assert": "^4.0.1",
     "@japa/plugin-adonisjs": "^5.0.0",
     "@japa/runner": "^4.2.0",
-    "@adonisjs/queue": "^0.6.0",
-    "reflect-metadata": "^0.2.0",
-    "@types/node": "^22.0.0",
     "@types/luxon": "^3.0.0",
+    "@types/node": "^22.0.0",
     "@types/opossum": "^8.1.9",
+    "eslint": "^9.20.0",
+    "prettier": "^3.4.2",
+    "reflect-metadata": "^0.2.0",
     "tsx": "^4.19.0",
     "typescript": "~5.7"
   }

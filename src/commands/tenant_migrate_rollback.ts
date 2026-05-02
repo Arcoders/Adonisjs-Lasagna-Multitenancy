@@ -3,6 +3,8 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
 import app from '@adonisjs/core/services/app'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
+import HookRegistry from '../services/hook_registry.js'
+import TenantMigrated from '../events/tenant_migrated.js'
 
 export default class TenantMigrateRollback extends BaseCommand {
   static readonly commandName = 'tenant:migrate:rollback'
@@ -38,6 +40,7 @@ export default class TenantMigrateRollback extends BaseCommand {
       return
     }
 
+    const hooks = await app.container.make(HookRegistry)
     let succeeded = 0
     let failed = 0
 
@@ -50,12 +53,21 @@ export default class TenantMigrateRollback extends BaseCommand {
             task.update('Connecting...')
             tenant.getConnection()
 
+            if (!this.dryRun) {
+              await hooks.run('before', 'migrate', { tenant, direction: 'down' })
+            }
+
             task.update('Rolling back last migration...')
             await tenant.migrate({
               direction: 'down',
               disableLocks: this.disableLocks,
               dryRun: this.dryRun,
             })
+
+            if (!this.dryRun) {
+              await hooks.run('after', 'migrate', { tenant, direction: 'down' })
+              await TenantMigrated.dispatch(tenant, 'down')
+            }
 
             succeeded++
             return 'completed'

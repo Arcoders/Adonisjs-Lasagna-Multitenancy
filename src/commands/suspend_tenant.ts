@@ -3,6 +3,7 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
 import app from '@adonisjs/core/services/app'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
+import TenantSuspended from '../events/tenant_suspended.js'
 
 export default class SuspendTenant extends BaseCommand {
   static readonly commandName = 'tenant:suspend'
@@ -24,6 +25,7 @@ export default class SuspendTenant extends BaseCommand {
       }
 
       await tenant.suspend()
+      await TenantSuspended.dispatch(tenant)
       this.logger.success(`Tenant "${tenant.name}" has been suspended.`)
     } catch (error) {
       this.logger.error(`Failed to suspend tenant: ${error.message}`)

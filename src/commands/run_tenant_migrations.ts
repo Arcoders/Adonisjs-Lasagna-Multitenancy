@@ -3,6 +3,8 @@ import type { CommandOptions } from '@adonisjs/core/types/ace'
 import app from '@adonisjs/core/services/app'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract, TenantModelContract } from '../types/contracts.js'
+import HookRegistry from '../services/hook_registry.js'
+import TenantMigrated from '../events/tenant_migrated.js'
 
 export default class RunTenantMigrations extends BaseCommand {
   static readonly commandName = 'migration:tenant:run'
@@ -40,6 +42,7 @@ export default class RunTenantMigrations extends BaseCommand {
 
   private async migrateTenant(tenant: TenantModelContract) {
     const tasks = this.ui.tasks({ verbose: this.verbose })
+    const hooks = await app.container.make(HookRegistry)
 
     await tasks
       .add(`Migrating tenant "${tenant.name}": schema (${tenant.schemaName})`, async (task) => {
@@ -47,12 +50,21 @@ export default class RunTenantMigrations extends BaseCommand {
           task.update('Connecting to the tenant database')
           tenant.getConnection()
 
+          if (!this.dryRun) {
+            await hooks.run('before', 'migrate', { tenant, direction: 'up' })
+          }
+
           task.update('Running migrations')
           await tenant.migrate({
             direction: 'up',
             disableLocks: this.disableLocks,
             dryRun: this.dryRun,
           })
+
+          if (!this.dryRun) {
+            await hooks.run('after', 'migrate', { tenant, direction: 'up' })
+            await TenantMigrated.dispatch(tenant, 'up')
+          }
 
           return 'completed'
         } catch (error) {
