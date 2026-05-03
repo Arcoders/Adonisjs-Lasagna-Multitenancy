@@ -358,6 +358,41 @@
       "filePath": "tenant_exec.js"
     },
     {
+      "commandName": "tenant:maintenance",
+      "description": "Toggle maintenance mode for a tenant (independent of suspended status)",
+      "help": "Examples: node ace tenant:maintenance <id> --message=\"Back at 18:00 UTC\"; node ace tenant:maintenance <id> --off",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "off", "flagName": "off", "required": false, "type": "boolean", "description": "Exit maintenance mode (default: enter)" },
+        { "name": "message", "flagName": "message", "required": false, "type": "string", "description": "Optional message shown in the 503 response" }
+      ],
+      "args": [
+        { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID to toggle", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "tenant_maintenance.js"
+    },
+    {
+      "commandName": "tenant:impersonate",
+      "description": "Issue an admin impersonation token for a target user inside a tenant",
+      "help": "Example: node ace tenant:impersonate <tenantId> <userId> --admin=admin-42 --duration=900 --reason=\"support ticket #1234\"",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "admin", "flagName": "admin", "required": false, "type": "string", "description": "Acting admin id (recorded in the audit log)" },
+        { "name": "duration", "flagName": "duration", "required": false, "type": "number", "description": "Session duration in seconds (default 3600)" },
+        { "name": "reason", "flagName": "reason", "required": false, "type": "string", "description": "Optional reason recorded in audit trail" },
+        { "name": "path", "flagName": "path", "required": false, "type": "string", "description": "Path embedded in the printed redirect URL (default /)" }
+      ],
+      "args": [
+        { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID", "type": "string" },
+        { "name": "userId", "argumentName": "userId", "required": true, "description": "Target user ID inside the tenant", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "tenant_impersonate.js"
+    },
+    {
       "commandName": "tenant:purge-expired",
       "description": "Drop schemas of soft-deleted tenants whose retention window has elapsed. Idempotent — safe to run from cron.",
       "help": "Suggested cron: 0 3 * * * node ace tenant:purge-expired --force",

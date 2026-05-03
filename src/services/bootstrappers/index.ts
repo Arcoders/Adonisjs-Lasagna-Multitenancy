@@ -25,3 +25,11 @@ export {
   tenantSessionKey,
   TENANT_SESSION_PREFIX,
 } from './session_bootstrapper.js'
+export {
+  default as transmitBootstrapper,
+  createTransmitBootstrapper,
+  tenantBroadcast,
+  tenantChannel,
+  TENANT_BROADCAST_PREFIX,
+} from './transmit_bootstrapper.js'
+export type { TransmitBootstrapperOptions } from './transmit_bootstrapper.js'

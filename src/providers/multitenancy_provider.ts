@@ -9,12 +9,14 @@ import cacheBootstrapper from '../services/bootstrappers/cache_bootstrapper.js'
 import driveBootstrapper from '../services/bootstrappers/drive_bootstrapper.js'
 import mailBootstrapper from '../services/bootstrappers/mail_bootstrapper.js'
 import sessionBootstrapper from '../services/bootstrappers/session_bootstrapper.js'
+import transmitBootstrapper from '../services/bootstrappers/transmit_bootstrapper.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
 import HookRegistry from '../services/hook_registry.js'
 import IsolationDriverRegistry from '../services/isolation/registry.js'
 import SchemaPgDriver from '../services/isolation/schema_pg_driver.js'
 import DatabasePgDriver from '../services/isolation/database_pg_driver.js'
 import RowScopePgDriver from '../services/isolation/rowscope_pg_driver.js'
+import SqliteMemoryDriver from '../services/isolation/sqlite_memory_driver.js'
 import TenantResolverRegistry from '../services/resolvers/registry.js'
 import { builtInResolvers } from '../services/resolvers/builtins.js'
 import TenantLogContext from '../services/tenant_log_context.js'
@@ -23,6 +25,9 @@ import DoctorService from '../services/doctor/doctor_service.js'
 import { builtInChecks } from '../services/doctor/checks/index.js'
 import QuotaService from '../services/quota_service.js'
 import ReadReplicaService from '../services/read_replica_service.js'
+import CrossDomainRedirectService from '../services/cross_domain_redirect_service.js'
+import ImpersonationService from '../services/impersonation_service.js'
+import AuditLogService from '../services/audit_log_service.js'
 
 export default class MultitenancyProvider {
   constructor(protected app: ApplicationService) {}
@@ -42,6 +47,15 @@ export default class MultitenancyProvider {
     })
     this.app.container.singleton(QuotaService, () => new QuotaService())
     this.app.container.singleton(ReadReplicaService, () => new ReadReplicaService())
+    this.app.container.singleton(
+      CrossDomainRedirectService,
+      () => new CrossDomainRedirectService()
+    )
+    this.app.container.singleton(AuditLogService, () => new AuditLogService())
+    this.app.container.singleton(ImpersonationService, async (resolver) => {
+      const auditLog = await resolver.make(AuditLogService)
+      return new ImpersonationService({ auditLog })
+    })
   }
 
   async boot() {
@@ -84,6 +98,9 @@ export default class MultitenancyProvider {
         { activate: true }
       )
     }
+    if (choice === 'sqlite-memory' && !drivers.has('sqlite-memory')) {
+      drivers.register(new SqliteMemoryDriver(), { activate: true })
+    }
 
     BackofficeBaseModel.$adapter = new BackofficeAdapter(db)
     TenantBaseModel.$adapter = new TenantAdapter(db, drivers)
@@ -124,6 +141,7 @@ export default class MultitenancyProvider {
       { name: 'drive', binding: 'drive.manager', bootstrapper: driveBootstrapper },
       { name: 'mail', binding: 'mail.manager', bootstrapper: mailBootstrapper },
       { name: 'session', binding: 'session', bootstrapper: sessionBootstrapper },
+      { name: 'transmit', binding: 'transmit', bootstrapper: transmitBootstrapper },
     ] as const
 
     const logger = await this.app.container.make('logger').catch(() => undefined)
@@ -143,6 +161,19 @@ export default class MultitenancyProvider {
 
   async start() {
     await import('../extensions/request.js')
+
+    const { installRouterMacros, autoLoadScopedRouteFiles } = await import(
+      '../extensions/router.js'
+    )
+    await installRouterMacros()
+
+    const config = this.app.config.get<MultitenancyConfig>('multitenancy')
+    if (config.routing?.autoLoad !== false) {
+      await autoLoadScopedRouteFiles(this.app, {
+        tenantRoutesFile: config.routing?.tenantRoutesFile,
+        universalRoutesFile: config.routing?.universalRoutesFile,
+      })
+    }
   }
 
   /**

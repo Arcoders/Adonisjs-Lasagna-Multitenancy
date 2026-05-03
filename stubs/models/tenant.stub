@@ -27,6 +27,12 @@ export default class Tenant extends BackofficeBaseModel {
   @column()
   declare customDomain: string | null
 
+  @column()
+  declare maintenance: boolean
+
+  @column()
+  declare maintenanceMessage: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
@@ -69,6 +75,11 @@ export default class Tenant extends BackofficeBaseModel {
   @computed()
   get isDeleted(): boolean {
     return this.deletedAt !== null
+  }
+
+  @computed()
+  get isMaintenance(): boolean {
+    return this.maintenance === true
   }
 
   async getConnection() {
@@ -121,6 +132,20 @@ export default class Tenant extends BackofficeBaseModel {
 
   async activate() {
     this.status = 'active'
+    await this.save()
+    await this.invalidateCache()
+  }
+
+  async enterMaintenance(message?: string | null) {
+    this.maintenance = true
+    this.maintenanceMessage = message ?? null
+    await this.save()
+    await this.invalidateCache()
+  }
+
+  async exitMaintenance() {
+    this.maintenance = false
+    this.maintenanceMessage = null
     await this.save()
     await this.invalidateCache()
   }

@@ -12,4 +12,5 @@ export {
   default as RowScopePgDriver,
   configuredScopeColumn,
 } from './rowscope_pg_driver.js'
+export { default as SqliteMemoryDriver } from './sqlite_memory_driver.js'
 export { getActiveDriver } from './active_driver.js'

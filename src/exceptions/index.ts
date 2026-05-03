@@ -4,3 +4,6 @@ export { default as TenantSuspendedException } from './tenant_suspended_exceptio
 export { default as TenantNotReadyException } from './tenant_not_ready_exception.js'
 export { default as CircuitOpenException } from './circuit_open_exception.js'
 export { default as QuotaExceededException } from './quota_exceeded_exception.js'
+export { default as CentralRouteViolationException } from './central_route_violation_exception.js'
+export { default as TenantMaintenanceException } from './tenant_maintenance_exception.js'
+export { default as ImpersonationInvalidException } from './impersonation_invalid_exception.js'

@@ -2,6 +2,7 @@ import { getConfig } from '../config.js'
 import CircuitOpenException from '../exceptions/circuit_open_exception.js'
 import TenantNotReadyException from '../exceptions/tenant_not_ready_exception.js'
 import TenantSuspendedException from '../exceptions/tenant_suspended_exception.js'
+import TenantMaintenanceException from '../exceptions/tenant_maintenance_exception.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
 import TenantLogContext from '../services/tenant_log_context.js'
 import app from '@adonisjs/core/services/app'
@@ -24,6 +25,14 @@ export default class TenantGuardMiddleware {
       throw new TenantNotReadyException()
     }
 
+    if (tenant.isMaintenance && !this.#hasMaintenanceBypass(request)) {
+      const cfg = getConfig().maintenance
+      const exc = new TenantMaintenanceException()
+      exc.retryAfterSeconds = cfg?.retryAfterSeconds ?? 600
+      exc.tenantMessage = tenant.maintenanceMessage ?? cfg?.defaultMessage ?? null
+      throw exc
+    }
+
     const cbService = await app.container.make(CircuitBreakerService)
     if (cbService.isOpen(tenant.id)) {
       throw new CircuitOpenException()
@@ -31,5 +40,13 @@ export default class TenantGuardMiddleware {
 
     const logCtx = await app.container.make(TenantLogContext)
     return logCtx.run({ tenantId: tenant.id }, () => next())
+  }
+
+  #hasMaintenanceBypass(request: HttpContext['request']): boolean {
+    const cfg = getConfig().maintenance
+    if (!cfg?.bypassToken) return false
+    const headerName = cfg.bypassHeader ?? 'x-tenant-bypass-maintenance'
+    const presented = request.header(headerName)
+    return typeof presented === 'string' && presented === cfg.bypassToken
   }
 }
