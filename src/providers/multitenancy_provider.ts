@@ -10,6 +10,7 @@ import CircuitBreakerService from '../services/circuit_breaker_service.js'
 import HookRegistry from '../services/hook_registry.js'
 import IsolationDriverRegistry from '../services/isolation/registry.js'
 import SchemaPgDriver from '../services/isolation/schema_pg_driver.js'
+import DatabasePgDriver from '../services/isolation/database_pg_driver.js'
 import TenantLogContext from '../services/tenant_log_context.js'
 import HealthService from '../health/health_service.js'
 import DoctorService from '../services/doctor/doctor_service.js'
@@ -63,7 +64,16 @@ export default class MultitenancyProvider {
         { activate: true }
       )
     }
-    // Other drivers (database-pg, rowscope-pg) land in subsequent commits.
+    if (choice === 'database-pg' && !drivers.has('database-pg')) {
+      drivers.register(
+        new DatabasePgDriver({
+          templateConnectionName: config.isolation?.templateConnectionName,
+          databasePrefix: config.isolation?.tenantDatabasePrefix,
+        }),
+        { activate: true }
+      )
+    }
+    // rowscope-pg lands in a subsequent commit.
   }
 
   async start() {

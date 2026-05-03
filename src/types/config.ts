@@ -79,6 +79,11 @@ export interface IsolationConfig {
    * config is cloned to register tenant connections. Defaults to `'tenant'`.
    */
   templateConnectionName?: string
+  /**
+   * For `database-pg`: prefix used to name the per-tenant PostgreSQL
+   * database (`<prefix><tenantId>`). Defaults to `tenant_`.
+   */
+  tenantDatabasePrefix?: string
 }
 
 export interface MultitenancyConfig {

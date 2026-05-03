@@ -25,7 +25,11 @@ export { default as ReadReplicaService } from './read_replica_service.js'
 export { default as HookRegistry } from './hook_registry.js'
 export { default as BootstrapperRegistry } from './bootstrapper_registry.js'
 export type { BootstrapperContext, TenantBootstrapper } from './bootstrapper_registry.js'
-export { IsolationDriverRegistry, SchemaPgDriver } from './isolation/index.js'
+export {
+  IsolationDriverRegistry,
+  SchemaPgDriver,
+  DatabasePgDriver,
+} from './isolation/index.js'
 export type {
   IsolationDriver,
   IsolationDriverName,

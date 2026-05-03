@@ -50,6 +50,7 @@ export {
   BootstrapperRegistry,
   IsolationDriverRegistry,
   SchemaPgDriver,
+  DatabasePgDriver,
   cacheBootstrapper,
   createCacheBootstrapper,
   tenantCache,
