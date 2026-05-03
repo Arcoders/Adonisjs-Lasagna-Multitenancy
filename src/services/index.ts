@@ -33,6 +33,17 @@ export {
   configuredScopeColumn,
   getActiveDriver,
 } from './isolation/index.js'
+export {
+  TenantResolverRegistry,
+  HeaderResolver,
+  SubdomainResolver,
+  PathResolver,
+  DomainOrSubdomainResolver,
+  RequestDataResolver,
+  ResolverHit,
+  builtInResolvers,
+} from './resolvers/index.js'
+export type { TenantResolver, TenantResolveResult } from './resolvers/index.js'
 export type {
   IsolationDriver,
   IsolationDriverName,

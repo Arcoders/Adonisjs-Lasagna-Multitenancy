@@ -1,7 +1,23 @@
 import type { DeclarativeHooks } from '../services/hook_registry.js'
 import type { TenantModelContract } from './contracts.js'
 
-export type TenantResolverStrategy = 'subdomain' | 'header' | 'path'
+export type TenantResolverStrategy =
+  | 'subdomain'
+  | 'header'
+  | 'path'
+  | 'domain-or-subdomain'
+  | 'request-data'
+
+/**
+ * Per-strategy configuration the resolvers consume. Optional — the built-in
+ * resolvers fall back to sensible defaults when these blocks are absent.
+ */
+export interface RequestDataResolverConfig {
+  /** Query-string key. Default `tenant_id`. */
+  queryKey?: string
+  /** Request-body key (JSON / form / multipart). Default `tenant_id`. */
+  bodyKey?: string
+}
 
 export interface BackupRetentionTier {
   /** Minimum hours between scheduled backups for tenants on this tier. */
@@ -118,8 +134,15 @@ export interface MultitenancyConfig {
   tenantConnectionNamePrefix: string
   tenantSchemaPrefix: string
   resolverStrategy: TenantResolverStrategy
+  /**
+   * Optional: chain multiple resolvers in order. The first one to return a
+   * hit wins. When provided, this overrides `resolverStrategy`.
+   */
+  resolverChain?: string[]
   tenantHeaderKey: string
   baseDomain: string
+  /** Settings for the `request-data` resolver. */
+  requestData?: RequestDataResolverConfig
   /**
    * Optional isolation block. If omitted, the package falls back to
    * `{ driver: 'schema-pg' }` to preserve v1 behavior.

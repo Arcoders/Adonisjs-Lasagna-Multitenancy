@@ -3,6 +3,7 @@ export type {
   TenantResolverStrategy,
   IsolationConfig,
   IsolationDriverChoice,
+  RequestDataResolverConfig,
 } from './types/config.js'
 export { TENANT_REPOSITORY } from './types/contracts.js'
 export type {
@@ -54,6 +55,14 @@ export {
   RowScopePgDriver,
   configuredScopeColumn,
   getActiveDriver,
+  TenantResolverRegistry,
+  HeaderResolver,
+  SubdomainResolver,
+  PathResolver,
+  DomainOrSubdomainResolver,
+  RequestDataResolver,
+  ResolverHit,
+  builtInResolvers,
   cacheBootstrapper,
   createCacheBootstrapper,
   tenantCache,
@@ -104,6 +113,8 @@ export type {
   DestroyOptions,
   MigrateOptions,
   MigrateResult,
+  TenantResolver,
+  TenantResolveResult,
   TenantLogContextData,
   QuotaCheckResult,
   QuotaStateSnapshot,

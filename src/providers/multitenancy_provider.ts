@@ -15,6 +15,8 @@ import IsolationDriverRegistry from '../services/isolation/registry.js'
 import SchemaPgDriver from '../services/isolation/schema_pg_driver.js'
 import DatabasePgDriver from '../services/isolation/database_pg_driver.js'
 import RowScopePgDriver from '../services/isolation/rowscope_pg_driver.js'
+import TenantResolverRegistry from '../services/resolvers/registry.js'
+import { builtInResolvers } from '../services/resolvers/builtins.js'
 import TenantLogContext from '../services/tenant_log_context.js'
 import HealthService from '../health/health_service.js'
 import DoctorService from '../services/doctor/doctor_service.js'
@@ -28,6 +30,7 @@ export default class MultitenancyProvider {
   register() {
     this.app.container.singleton(BootstrapperRegistry, () => new BootstrapperRegistry())
     this.app.container.singleton(IsolationDriverRegistry, () => new IsolationDriverRegistry())
+    this.app.container.singleton(TenantResolverRegistry, () => new TenantResolverRegistry())
     this.app.container.singleton(CircuitBreakerService, () => new CircuitBreakerService())
     this.app.container.singleton(HookRegistry, () => new HookRegistry())
     this.app.container.singleton(TenantLogContext, () => new TenantLogContext())
@@ -84,6 +87,19 @@ export default class MultitenancyProvider {
 
     BackofficeBaseModel.$adapter = new BackofficeAdapter(db)
     TenantBaseModel.$adapter = new TenantAdapter(db, drivers)
+
+    // Seed the resolver registry with the built-ins and apply the
+    // configured strategy (or chain). Apps can register additional
+    // resolvers in their own provider's `boot()` after this one runs.
+    const resolvers = await this.app.container.make(TenantResolverRegistry)
+    for (const r of builtInResolvers) {
+      if (!resolvers.has(r.name)) resolvers.register(r)
+    }
+    const chain =
+      config.resolverChain && config.resolverChain.length > 0
+        ? config.resolverChain
+        : [config.resolverStrategy]
+    resolvers.setChain(chain)
 
     const hooks = await this.app.container.make(HookRegistry)
     hooks.loadDeclarative(config.hooks)
