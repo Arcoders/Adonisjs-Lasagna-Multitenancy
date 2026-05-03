@@ -1,6 +1,6 @@
 {
   "name": "@adonisjs-lasagna/multitenancy",
-  "version": "2.0.0-beta.0",
+  "version": "2.0.0-beta.1",
   "description": "Multi-tenancy for AdonisJS 7 with pluggable isolation drivers (schema/database/row-scoping), connection pooling, circuit breaking, queues, and satellite features",
   "type": "module",
   "license": "MIT",
@@ -121,7 +121,8 @@
     "@adonisjs/drive": "^3.0.0",
     "@adonisjs/mail": "^9.0.0",
     "@adonisjs/session": "^7.0.0",
-    "@aws-sdk/client-s3": "^3.0.0"
+    "@aws-sdk/client-s3": "^3.0.0",
+    "better-sqlite3": "^11.0.0"
   },
   "peerDependenciesMeta": {
     "@adonisjs/drive": {
@@ -134,6 +135,9 @@
       "optional": true
     },
     "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "better-sqlite3": {
       "optional": true
     }
   },

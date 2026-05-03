@@ -57,6 +57,11 @@ export function multitenancyAdminRoutes(options: MultitenancyAdminRoutesOptions 
     router.post('/tenants/:id/destroy', (ctx) => c.destroy(ctx))
     router.post('/tenants/:id/restore', (ctx) => c.restore(ctx))
     router.get('/tenants/:id/queue/stats', (ctx) => c.queueStats(ctx))
+    router.post('/tenants/:id/maintenance', (ctx) => c.enterMaintenance(ctx))
+    router.delete('/tenants/:id/maintenance', (ctx) => c.exitMaintenance(ctx))
+    router.post('/tenants/:id/impersonations', (ctx) => c.startImpersonation(ctx))
+    router.delete('/impersonations/:token', (ctx) => c.stopImpersonation(ctx))
+    router.delete('/impersonations/by-id/:sessionId', (ctx) => c.stopImpersonation(ctx))
     router.get('/health/report', (ctx) => c.healthReport(ctx))
   }
 

@@ -15,6 +15,9 @@ import TenantCreated from '../events/tenant_created.js'
 import TenantActivated from '../events/tenant_activated.js'
 import TenantSuspended from '../events/tenant_suspended.js'
 import TenantDeleted from '../events/tenant_deleted.js'
+import TenantEnteredMaintenance from '../events/tenant_entered_maintenance.js'
+import TenantExitedMaintenance from '../events/tenant_exited_maintenance.js'
+import ImpersonationService from '../services/impersonation_service.js'
 
 const VALID_STATUSES: TenantStatus[] = [
   'provisioning',
@@ -147,5 +150,74 @@ export default class AdminController {
     const result = await doctor.run()
     response.status(result.totals.error > 0 ? 503 : 200)
     return response.send(result)
+  }
+
+  async enterMaintenance({ params, request, response }: HttpContext) {
+    const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
+    const tenant = await repo.findById(params.id, true)
+    if (!tenant) return response.notFound({ error: 'tenant_not_found' })
+    if (typeof tenant.enterMaintenance !== 'function') {
+      return response.unprocessableEntity({ error: 'maintenance_not_supported_by_model' })
+    }
+    if (tenant.isMaintenance) return response.ok({ data: serialize(tenant), unchanged: true })
+
+    const message = request.input('message') ?? null
+    await tenant.enterMaintenance(message)
+    await TenantEnteredMaintenance.dispatch(tenant, message)
+    return response.ok({ data: serialize(tenant) })
+  }
+
+  async exitMaintenance({ params, response }: HttpContext) {
+    const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
+    const tenant = await repo.findById(params.id, true)
+    if (!tenant) return response.notFound({ error: 'tenant_not_found' })
+    if (typeof tenant.exitMaintenance !== 'function') {
+      return response.unprocessableEntity({ error: 'maintenance_not_supported_by_model' })
+    }
+    if (!tenant.isMaintenance) return response.ok({ data: serialize(tenant), unchanged: true })
+
+    await tenant.exitMaintenance()
+    await TenantExitedMaintenance.dispatch(tenant)
+    return response.ok({ data: serialize(tenant) })
+  }
+
+  async startImpersonation({ params, request, response }: HttpContext) {
+    const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
+    const tenant = await repo.findById(params.id)
+    if (!tenant) return response.notFound({ error: 'tenant_not_found' })
+
+    const userId = String(request.input('userId') ?? '').trim()
+    const adminId = String(request.input('adminId') ?? '').trim()
+    if (!userId || !adminId) {
+      return response.badRequest({ error: 'userId_and_adminId_required' })
+    }
+    const durationSeconds = request.input('durationSeconds')
+    const reason = request.input('reason') ?? null
+
+    const svc = await app.container.make(ImpersonationService)
+    const result = await svc.start({
+      tenantId: tenant.id,
+      targetUserId: userId,
+      adminId,
+      adminType: 'admin',
+      durationSeconds:
+        typeof durationSeconds === 'number'
+          ? durationSeconds
+          : Number(durationSeconds) || undefined,
+      reason,
+      ipAddress: request.ip(),
+    })
+    return response.created({ data: result })
+  }
+
+  async stopImpersonation({ params, request, response }: HttpContext) {
+    const svc = await app.container.make(ImpersonationService)
+    let revoked = false
+    if (params.token) {
+      revoked = await svc.stop(params.token, { ipAddress: request.ip() })
+    } else if (params.sessionId) {
+      revoked = await svc.revokeById(params.sessionId)
+    }
+    return response.ok({ revoked })
   }
 }

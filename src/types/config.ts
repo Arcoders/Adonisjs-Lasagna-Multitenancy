@@ -82,7 +82,11 @@ export interface ReadReplicasConfig {
   connectionSuffix?: string
 }
 
-export type IsolationDriverChoice = 'schema-pg' | 'database-pg' | 'rowscope-pg'
+export type IsolationDriverChoice =
+  | 'schema-pg'
+  | 'database-pg'
+  | 'rowscope-pg'
+  | 'sqlite-memory'
 
 export interface IsolationConfig {
   /**
@@ -126,6 +130,19 @@ export interface IsolationConfig {
   rowScopeMode?: 'strict' | 'allowGlobal'
 }
 
+export interface RoutingConfig {
+  /**
+   * Auto-load `start/tenant.ts` and `start/universal.ts` after the router
+   * macros are installed. Defaults to `true`. Set to `false` if you want
+   * to wire the files yourself (e.g. via Adonis preloads).
+   */
+  autoLoad?: boolean
+  /** Filename inside `start/` to load tenant routes from. Default: `tenant.ts`. */
+  tenantRoutesFile?: string
+  /** Filename inside `start/` to load universal routes from. Default: `universal.ts`. */
+  universalRoutesFile?: string
+}
+
 export interface MultitenancyConfig {
   backofficeSchemaName: string
   backofficeConnectionName: string
@@ -148,6 +165,56 @@ export interface MultitenancyConfig {
    * `{ driver: 'schema-pg' }` to preserve v1 behavior.
    */
   isolation?: IsolationConfig
+  /**
+   * Routing convention. When omitted (or `routing.autoLoad !== false`), the
+   * provider will try to import `start/tenant.ts` and `start/universal.ts`
+   * after installing the `Route.tenant() / Route.central() / Route.universal()`
+   * macros.
+   */
+  routing?: RoutingConfig
+  /**
+   * Per-tenant maintenance mode (orthogonal to `suspended`). When omitted,
+   * tenants without an `isMaintenance` flag are simply never in maintenance.
+   */
+  /**
+   * Optional impersonation configuration. If `secret` is unset, calls to
+   * `ImpersonationService.start()` throw — the package never ships with a
+   * default secret.
+   */
+  impersonation?: {
+    /** HMAC secret. MUST be at least 32 chars. */
+    secret: string
+    /** Default session duration (seconds). Default: 3600 (1h). Min 60. */
+    defaultDuration?: number
+    /** Hard upper bound (seconds). Default: 86400 (24h). */
+    maxDuration?: number
+    /** Override the header read by `ImpersonationMiddleware`. Default `x-impersonation-token`. */
+    headerName?: string
+    /** Override the cookie name fallback. Default `__impersonation`. */
+    cookieName?: string
+  }
+  maintenance?: {
+    /**
+     * Default message returned when a tenant is in maintenance without one
+     * of its own. Surfaced in the `TenantMaintenanceException`.
+     */
+    defaultMessage?: string
+    /**
+     * Value (in seconds) for the `Retry-After` HTTP header carried on the
+     * 503 response. Default: 600 (10 minutes).
+     */
+    retryAfterSeconds?: number
+    /**
+     * Optional shared-secret bypass token. Requests presenting this value
+     * via the `x-tenant-bypass-maintenance` header skip the maintenance
+     * check. Use sparingly; rotate often.
+     */
+    bypassToken?: string
+    /**
+     * Header name read for the bypass token. Default: `x-tenant-bypass-maintenance`.
+     */
+    bypassHeader?: string
+  }
   schemaCacheTtl: number
   ignorePaths: string[]
   maintenanceSchedule: {

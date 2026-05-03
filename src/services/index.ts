@@ -13,6 +13,9 @@ export { default as SqlImportService } from './sql_import_service.js'
 export type { SqlImportOptions, SqlImportResult } from './sql_import_service.js'
 export { default as AuditLogService } from './audit_log_service.js'
 export type { LogActionOptions } from './audit_log_service.js'
+export { default as CrossDomainRedirectService } from './cross_domain_redirect_service.js'
+export type { BuildUrlOptions } from './cross_domain_redirect_service.js'
+export { default as ImpersonationService } from './impersonation_service.js'
 export { default as FeatureFlagService } from './feature_flag_service.js'
 export { default as WebhookService } from './webhook_service.js'
 export { default as BrandingService } from './branding_service.js'
@@ -30,6 +33,7 @@ export {
   SchemaPgDriver,
   DatabasePgDriver,
   RowScopePgDriver,
+  SqliteMemoryDriver,
   configuredScopeColumn,
   getActiveDriver,
 } from './isolation/index.js'
@@ -70,7 +74,13 @@ export {
   tenantSession,
   tenantSessionKey,
   TENANT_SESSION_PREFIX,
+  transmitBootstrapper,
+  createTransmitBootstrapper,
+  tenantBroadcast,
+  tenantChannel,
+  TENANT_BROADCAST_PREFIX,
 } from './bootstrappers/index.js'
+export type { TransmitBootstrapperOptions } from './bootstrappers/index.js'
 export { DoctorService, builtInChecks } from './doctor/index.js'
 export type {
   DiagnosisSeverity,

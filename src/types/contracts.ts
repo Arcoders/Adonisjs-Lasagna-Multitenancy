@@ -38,6 +38,19 @@ export interface TenantModelContract<TMeta extends object = TenantMetadata> {
   readonly isFailed: boolean
   readonly isDeleted: boolean
   /**
+   * Maintenance mode is independent of `status`. A tenant can be `active`
+   * AND in maintenance — useful for scheduled migrations, billing
+   * cutovers, etc., without flipping the lifecycle status.
+   *
+   * Implementations that don't expose this column should default
+   * `isMaintenance` to `false` and treat `enterMaintenance/exitMaintenance`
+   * as a no-op so older models keep working.
+   */
+  readonly isMaintenance?: boolean
+  maintenanceMessage?: string | null
+  enterMaintenance?(message?: string | null): Promise<void>
+  exitMaintenance?(): Promise<void>
+  /**
    * Optional: when implemented, returns a Lucid client routed to a read
    * replica. Apps typically wire this up via `ReadReplicaService.resolve(this)`.
    * Without read replicas configured, callers should fall back to the
