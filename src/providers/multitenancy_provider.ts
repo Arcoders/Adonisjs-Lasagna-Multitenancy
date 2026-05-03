@@ -92,4 +92,21 @@ export default class MultitenancyProvider {
   async start() {
     await import('../extensions/request.js')
   }
+
+  /**
+   * Invalidate module-level caches that hold references to container
+   * singletons. Without this, the next `tenancy.run()` (or any code that
+   * called `getActiveDriver()`) keeps a reference to the old, now-dead
+   * `TenantLogContext` / `IsolationDriverRegistry` instances, leading to
+   * stale-state surprises in test runs that reuse the container or in
+   * production hot-reload paths.
+   */
+  async shutdown() {
+    const [{ __configureTenancyForTests }, { __resetActiveDriverCache }] = await Promise.all([
+      import('../tenancy.js'),
+      import('../services/isolation/active_driver.js'),
+    ])
+    __configureTenancyForTests({})
+    __resetActiveDriverCache()
+  }
 }

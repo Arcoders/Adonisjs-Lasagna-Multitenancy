@@ -7,6 +7,7 @@ import type {
   MigrateOptions,
   MigrateResult,
 } from './driver.js'
+import { assertSafeIdentifier } from './identifier.js'
 
 const MAX_TENANT_CONNECTIONS = 50
 
@@ -50,30 +51,32 @@ export default class DatabasePgDriver implements IsolationDriver {
   }
 
   connectionName(tenantId: string): string {
+    assertSafeIdentifier(tenantId, 'tenant id')
     return `${getConfig().tenantConnectionNamePrefix}${tenantId}`
   }
 
   databaseName(tenant: TenantModelContract | string): string {
     const id = typeof tenant === 'string' ? tenant : tenant.id
+    assertSafeIdentifier(id, 'tenant id')
     const prefix = this.#databasePrefix ?? getConfig().tenantSchemaPrefix
     return `${prefix}${id}`
   }
 
   async provision(tenant: TenantModelContract): Promise<void> {
+    const dbName = this.databaseName(tenant)
     const { db } = await lucid()
-    const exists = await db.rawQuery(
-      'SELECT 1 FROM pg_database WHERE datname = ?',
-      [this.databaseName(tenant)]
-    )
+    const exists = await db.rawQuery('SELECT 1 FROM pg_database WHERE datname = ?', [dbName])
     const found = Array.isArray(exists.rows) ? exists.rows.length > 0 : (exists as any).length > 0
     if (!found) {
       // CREATE DATABASE cannot run in a transaction; rawQuery is fine.
-      await db.rawQuery(`CREATE DATABASE "${this.databaseName(tenant)}"`)
+      // dbName has already been validated by databaseName().
+      await db.rawQuery(`CREATE DATABASE "${dbName}"`)
     }
     await this.connect(tenant)
   }
 
   async destroy(tenant: TenantModelContract, opts: DestroyOptions = {}): Promise<void> {
+    const dbName = this.databaseName(tenant)
     await this.disconnect(tenant)
     if (opts.keepData) return
     const { db } = await lucid()
@@ -83,9 +86,9 @@ export default class DatabasePgDriver implements IsolationDriver {
       `SELECT pg_terminate_backend(pid)
          FROM pg_stat_activity
         WHERE datname = ? AND pid <> pg_backend_pid()`,
-      [this.databaseName(tenant)]
+      [dbName]
     )
-    await db.rawQuery(`DROP DATABASE IF EXISTS "${this.databaseName(tenant)}"`)
+    await db.rawQuery(`DROP DATABASE IF EXISTS "${dbName}"`)
   }
 
   async reset(tenant: TenantModelContract): Promise<void> {

@@ -96,6 +96,18 @@ export interface IsolationConfig {
    * to `tenant_id`.
    */
   rowScopeColumn?: string
+  /**
+   * For `rowscope-pg` (or any code using `withTenantScope`): how to behave
+   * when a scoped model query runs outside both `tenancy.run()` and
+   * `unscoped()`.
+   *
+   *  - `'strict'` (default): throw. The safe choice — a forgotten
+   *    `tenancy.run()` in a job/script becomes a loud failure instead of
+   *    a silent cross-tenant query.
+   *  - `'allowGlobal'`: log nothing, skip the scope. Backwards-compatible
+   *    with code that relied on the v1.x behavior.
+   */
+  rowScopeMode?: 'strict' | 'allowGlobal'
 }
 
 export interface MultitenancyConfig {

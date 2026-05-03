@@ -112,7 +112,6 @@ export default class AdminController {
     const { DateTime } = await import('luxon')
     tenant.deletedAt = DateTime.now()
     await tenant.save()
-    await tenant.invalidateCache()
 
     if (!keepSchema) {
       const driver = await getActiveDriver()
@@ -132,7 +131,6 @@ export default class AdminController {
 
     tenant.deletedAt = null
     await tenant.save()
-    await tenant.invalidateCache()
     return response.ok({ data: serialize(tenant) })
   }
 

@@ -145,6 +145,23 @@
       "filePath": "tenant_migrate_rollback.js"
     },
     {
+      "commandName": "tenant:migrate:fresh",
+      "description": "Drop and recreate per-tenant storage, then re-run migrations. DESTRUCTIVE.",
+      "help": "Use --force to skip the confirmation prompt. Use --seed to run db:seed after migrations.",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantsIds", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant ID(s) to refresh. Omit to refresh every tenant" },
+        { "name": "force", "flagName": "force", "required": false, "type": "boolean", "alias": "y", "description": "Skip the confirmation prompt" },
+        { "name": "seed", "flagName": "seed", "required": false, "type": "boolean", "description": "Run seeders after migrations finish for each tenant" },
+        { "name": "disableLocks", "flagName": "disable-locks", "required": false, "type": "boolean", "description": "Disable migration locks" },
+        { "name": "verbose", "flagName": "verbose", "required": false, "type": "boolean", "description": "Verbose output" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_migrate_fresh.js"
+    },
+    {
       "commandName": "tenant:queue:stats",
       "description": "Show BullMQ queue statistics for one or all tenant queues",
       "help": "",

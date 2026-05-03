@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { tenancy } from '../tenancy.js'
 import { configuredScopeColumn } from '../services/isolation/rowscope_pg_driver.js'
+import { getConfig } from '../config.js'
 
 /**
  * Lucid's `BaseModel` (typed loosely so this file doesn't have to import
@@ -35,6 +36,42 @@ export function isScopeBypassed(): boolean {
 }
 
 /**
+ * Read the strict-mode flag from config. Strict (default) throws when a
+ * scoped model is queried with no active `tenancy.run()` and no
+ * `unscoped(fn)` wrapper — making forgotten context a loud failure
+ * instead of a silent cross-tenant data leak.
+ */
+function isStrictScope(): boolean {
+  // Pull dynamically: getConfig() throws if the provider hasn't booted, so
+  // tests that exercise the mixin without booting the app fall back to
+  // strict-mode-off (preserves existing test ergonomics) while production
+  // gets strict-on by default.
+  try {
+    return (getConfig().isolation?.rowScopeMode ?? 'strict') === 'strict'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Thrown when a scoped model is queried without an active tenant context
+ * and without `unscoped(fn)`. Indicates a forgotten `tenancy.run()` —
+ * wrap the call site in either `tenancy.run(tenant, fn)` (intended) or
+ * `unscoped(fn)` (admin/cross-tenant operation).
+ */
+export class MissingTenantScopeException extends Error {
+  constructor(public readonly action: string) {
+    super(
+      `withTenantScope: ${action} ran outside both tenancy.run() and unscoped(). ` +
+        `Strict mode (config.isolation.rowScopeMode = 'strict') refuses to fall ` +
+        `through to a global query. Wrap the call site in tenancy.run(tenant, fn) ` +
+        `for a tenant operation, or unscoped(fn) for an explicit cross-tenant one.`
+    )
+    this.name = 'MissingTenantScopeException'
+  }
+}
+
+/**
  * Mixin that turns a Lucid model into a tenant-scoped one. Applied
  * queries (`find`, `fetch`, `paginate`) get `where tenant_id = <current>`
  * injected automatically; saves auto-fill the column.
@@ -65,23 +102,30 @@ export function withTenantScope<TBase extends LucidBaseModelClass>(Base: TBase):
 
       const column = configuredScopeColumn()
 
-      this.before('find', (query: any) => {
-        if (isScopeBypassed()) return
+      const requireScope = (action: string): string | null => {
+        if (isScopeBypassed()) return null
         const id = tenancy.currentId()
-        if (!id) return
-        query.where(column, id)
+        if (id) return id
+        if (isStrictScope()) throw new MissingTenantScopeException(action)
+        return null
+      }
+
+      this.before('find', (query: any) => {
+        const id = requireScope('find')
+        if (id) query.where(column, id)
       })
 
       this.before('fetch', (query: any) => {
-        if (isScopeBypassed()) return
-        const id = tenancy.currentId()
-        if (!id) return
-        query.where(column, id)
+        // `before('fetch')` also fires for query-builder-initiated update()
+        // and delete() in Lucid, so the scope predicate is applied there
+        // too — without this, `Model.query().delete()` outside a tenancy
+        // scope would silently wipe rows across tenants.
+        const id = requireScope('fetch/query')
+        if (id) query.where(column, id)
       })
 
       this.before('paginate', (queries: any) => {
-        if (isScopeBypassed()) return
-        const id = tenancy.currentId()
+        const id = requireScope('paginate')
         if (!id) return
         const [counter, fetcher] = Array.isArray(queries) ? queries : [queries, queries]
         counter?.where?.(column, id)
@@ -89,8 +133,7 @@ export function withTenantScope<TBase extends LucidBaseModelClass>(Base: TBase):
       })
 
       this.before('create', (model: any) => {
-        if (isScopeBypassed()) return
-        const id = tenancy.currentId()
+        const id = requireScope('create')
         if (!id) return
         if (model[column] === undefined || model[column] === null) {
           model[column] = id
@@ -98,8 +141,7 @@ export function withTenantScope<TBase extends LucidBaseModelClass>(Base: TBase):
       })
 
       this.before('update', (model: any) => {
-        if (isScopeBypassed()) return
-        const id = tenancy.currentId()
+        const id = requireScope('update')
         if (!id) return
         // Do not silently rewrite a different tenant's id; surface the bug.
         if (model[column] !== undefined && model[column] !== id) {
@@ -111,8 +153,7 @@ export function withTenantScope<TBase extends LucidBaseModelClass>(Base: TBase):
       })
 
       this.before('delete', (model: any) => {
-        if (isScopeBypassed()) return
-        const id = tenancy.currentId()
+        const id = requireScope('delete')
         if (!id) return
         if (model[column] !== undefined && model[column] !== id) {
           throw new Error(
