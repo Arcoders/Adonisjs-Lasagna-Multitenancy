@@ -50,23 +50,12 @@ export function buildTestTenant<TMeta extends object = TenantMetadata>(
     get isDeleted() {
       return this.deletedAt !== null
     },
-    getConnection() {
-      throw new Error(
-        '[testing] buildTestTenant produces an in-memory fake; getConnection() is not available. Use createTestTenant for DB-backed scenarios.'
-      )
-    },
-    async closeConnection() {},
-    async migrate() {},
-    async install() {},
-    async uninstall() {},
     async suspend() {
       this.status = 'suspended'
     },
     async activate() {
       this.status = 'active'
     },
-    async invalidateCache() {},
-    async dropSchemaIfExists() {},
     async save() {
       return tenant
     },

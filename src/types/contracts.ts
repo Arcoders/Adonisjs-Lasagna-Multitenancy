@@ -1,5 +1,4 @@
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import type { MigratorOptions } from '@adonisjs/lucid/types/migrator'
 import type { DateTime } from 'luxon'
 
 export const TENANT_REPOSITORY = Symbol('TENANT_REPOSITORY')
@@ -13,6 +12,15 @@ export type TenantStatus = 'provisioning' | 'active' | 'suspended' | 'failed' | 
  */
 export type TenantMetadata = Record<string, unknown>
 
+/**
+ * Contract every tenant model implementation must satisfy.
+ *
+ * v2 dropped `getConnection`/`closeConnection`/`install`/`uninstall`/
+ * `migrate`/`dropSchemaIfExists`/`invalidateCache` from this contract —
+ * those concerns now live on `IsolationDriver`. Implementations can keep
+ * those methods around for their own use, but the package never calls
+ * them.
+ */
 export interface TenantModelContract<TMeta extends object = TenantMetadata> {
   readonly id: string
   name: string
@@ -29,22 +37,15 @@ export interface TenantModelContract<TMeta extends object = TenantMetadata> {
   readonly isProvisioning: boolean
   readonly isFailed: boolean
   readonly isDeleted: boolean
-  getConnection(): QueryClientContract
   /**
    * Optional: when implemented, returns a Lucid client routed to a read
    * replica. Apps typically wire this up via `ReadReplicaService.resolve(this)`.
-   * Without read replicas configured, callers should fall back to
-   * `getConnection()`.
+   * Without read replicas configured, callers should fall back to the
+   * primary client returned by the active isolation driver.
    */
   getReadConnection?(): QueryClientContract | Promise<QueryClientContract>
-  closeConnection(): Promise<void>
-  migrate(options: Omit<MigratorOptions, 'connectionName'>): Promise<any>
-  install(): Promise<void>
-  uninstall(): Promise<void>
   suspend(): Promise<void>
   activate(): Promise<void>
-  invalidateCache(): Promise<void>
-  dropSchemaIfExists(): Promise<void>
   save(): Promise<TenantModelContract<TMeta>>
 }
 

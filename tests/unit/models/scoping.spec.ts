@@ -3,6 +3,7 @@ import {
   withTenantScope,
   unscoped,
   isScopeBypassed,
+  MissingTenantScopeException,
 } from '../../../src/models/scoping.js'
 import { tenancy, __configureTenancyForTests } from '../../../src/tenancy.js'
 import BootstrapperRegistry from '../../../src/services/bootstrapper_registry.js'
@@ -166,15 +167,9 @@ test.group('withTenantScope — query hooks', (group) => {
     })
   })
 
-  test('hooks no-op when no tenant scope is active', ({ assert }) => {
-    const { FakeBaseModel, hooks } = makeFakeBase()
-    const Scoped = withTenantScope(FakeBaseModel as any) as any
-    Scoped.boot()
-
-    const q = new FakeQuery()
-    hooks.find[0](q)
-    assert.deepEqual(q.predicates, [])
-  })
+  // (The old "hooks no-op when no tenant scope is active" test was removed
+  // when the default became strict — see the "strict mode (default)" and
+  // "allowGlobal mode" groups below for the current behavior.)
 
   test('boot() is idempotent — does not register duplicate hooks', async ({
     assert,
@@ -186,5 +181,105 @@ test.group('withTenantScope — query hooks', (group) => {
     Scoped.boot()
     Scoped.boot()
     assert.lengthOf(hooks.find, 1)
+  })
+})
+
+test.group('withTenantScope — strict mode (default)', (group) => {
+  group.each.setup(() => setupTestConfig())
+  group.each.teardown(() => __configureTenancyForTests({}))
+
+  test('find/fetch/paginate hooks throw when no scope is active', ({ assert }) => {
+    const { FakeBaseModel, hooks } = makeFakeBase()
+    const Scoped = withTenantScope(FakeBaseModel as any) as any
+    Scoped.boot()
+
+    assert.throws(() => hooks.find[0](new FakeQuery()), MissingTenantScopeException as any)
+    assert.throws(() => hooks.fetch[0](new FakeQuery()), MissingTenantScopeException as any)
+    assert.throws(() => hooks.paginate[0]([new FakeQuery(), new FakeQuery()]), MissingTenantScopeException as any)
+  })
+
+  test('create/update/delete hooks throw when no scope is active', ({ assert }) => {
+    const { FakeBaseModel, hooks } = makeFakeBase()
+    const Scoped = withTenantScope(FakeBaseModel as any) as any
+    Scoped.boot()
+
+    assert.throws(() => hooks.create[0]({}), MissingTenantScopeException as any)
+    assert.throws(() => hooks.update[0]({ tenant_id: 'x' }), MissingTenantScopeException as any)
+    assert.throws(() => hooks.delete[0]({ tenant_id: 'x' }), MissingTenantScopeException as any)
+  })
+
+  test('unscoped(fn) suppresses the throw — explicit cross-tenant operation', async ({
+    assert,
+  }) => {
+    const { FakeBaseModel, hooks } = makeFakeBase()
+    const Scoped = withTenantScope(FakeBaseModel as any) as any
+    Scoped.boot()
+
+    await unscoped(async () => {
+      assert.doesNotThrow(() => hooks.find[0](new FakeQuery()))
+    })
+  })
+
+  test('error names which action triggered the failure', ({ assert }) => {
+    const { FakeBaseModel, hooks } = makeFakeBase()
+    const Scoped = withTenantScope(FakeBaseModel as any) as any
+    Scoped.boot()
+    assert.throws(() => hooks.find[0](new FakeQuery()), /find/)
+    assert.throws(() => hooks.delete[0]({}), /delete/)
+  })
+})
+
+test.group('withTenantScope — allowGlobal mode', (group) => {
+  group.each.setup(() => setupTestConfig({ isolation: { driver: 'rowscope-pg', rowScopeMode: 'allowGlobal' } }))
+  group.each.teardown(() => __configureTenancyForTests({}))
+
+  test('find hook silently skips the predicate when no scope is active', ({ assert }) => {
+    const { FakeBaseModel, hooks } = makeFakeBase()
+    const Scoped = withTenantScope(FakeBaseModel as any) as any
+    Scoped.boot()
+
+    const q = new FakeQuery()
+    assert.doesNotThrow(() => hooks.find[0](q))
+    assert.deepEqual(q.predicates, [])
+  })
+})
+
+test.group('withTenantScope — bulk delete via fetch hook (C2 fix)', (group) => {
+  group.each.setup(() => setupTestConfig())
+  group.each.teardown(() => __configureTenancyForTests({}))
+
+  test('fetch hook adds predicate to query-builder-initiated delete (Lucid fires before:fetch)', async ({
+    assert,
+  }) => {
+    setupTenancy()
+    const { FakeBaseModel, hooks } = makeFakeBase()
+    const Scoped = withTenantScope(FakeBaseModel as any) as any
+    Scoped.boot()
+
+    await tenancy.run(fakeTenant('t-1'), async () => {
+      // Simulate `Model.query().where(...).delete()` — Lucid fires
+      // before('fetch') on the underlying query builder before issuing
+      // the DELETE, so the scope predicate gets appended.
+      const q = new FakeQuery()
+      q.where('status', 'active')
+      hooks.fetch[0](q)
+      assert.deepEqual(q.predicates, [
+        ['status', 'active'],
+        ['tenant_id', 't-1'],
+      ])
+    })
+  })
+
+  test('fetch hook throws on missing scope so query-builder bulk delete cannot leak', ({
+    assert,
+  }) => {
+    const { FakeBaseModel, hooks } = makeFakeBase()
+    const Scoped = withTenantScope(FakeBaseModel as any) as any
+    Scoped.boot()
+
+    // No tenancy.run scope, no unscoped() — under strict mode (default),
+    // Model.query().delete() in this state must throw rather than wipe
+    // every tenant's rows.
+    assert.throws(() => hooks.fetch[0](new FakeQuery()), MissingTenantScopeException as any)
   })
 })

@@ -247,9 +247,20 @@ export default class SqlImportService {
     return result
   }
 
+  /**
+   * On Windows, `spawn('psql', …)` does NOT honor PATHEXT, so the binary
+   * has to be referenced as `psql.exe`. This avoids passing `shell: true`,
+   * which would let `&`, `|`, `;`, etc. inside any arg get interpreted by
+   * cmd.exe — a command-injection vector if any spawn arg ever contained
+   * untrusted data.
+   */
+  #psqlBinary(): string {
+    return isWin ? 'psql.exe' : 'psql'
+  }
+
   async #hasPsql(): Promise<boolean> {
     return await new Promise((resolve) => {
-      const proc = spawn('psql', ['--version'], { shell: isWin })
+      const proc = spawn(this.#psqlBinary(), ['--version'])
       proc.on('error', () => resolve(false))
       proc.on('exit', (code) => resolve(code === 0))
     })
@@ -268,7 +279,7 @@ export default class SqlImportService {
       const env = { ...process.env }
       if (cfg.password) env.PGPASSWORD = cfg.password
 
-      const proc = spawn('psql', args, { env, shell: isWin })
+      const proc = spawn(this.#psqlBinary(), args, { env })
       let stderr = ''
       proc.stderr.on('data', (chunk: Buffer) => {
         stderr += chunk.toString()

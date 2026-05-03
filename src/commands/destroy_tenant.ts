@@ -51,7 +51,6 @@ export default class DestroyTenant extends BaseCommand {
       const { DateTime } = await import('luxon')
       tenant.deletedAt = DateTime.now()
       await tenant.save()
-      await tenant.invalidateCache()
 
       if (this.keepSchema) {
         this.logger.info(

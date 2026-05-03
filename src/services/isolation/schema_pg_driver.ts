@@ -7,6 +7,7 @@ import type {
   MigrateOptions,
   MigrateResult,
 } from './driver.js'
+import { assertSafeIdentifier } from './identifier.js'
 
 const MAX_TENANT_CONNECTIONS = 50
 
@@ -42,32 +43,37 @@ export default class SchemaPgDriver implements IsolationDriver {
   }
 
   connectionName(tenantId: string): string {
+    assertSafeIdentifier(tenantId, 'tenant id')
     return `${getConfig().tenantConnectionNamePrefix}${tenantId}`
   }
 
   schemaName(tenant: TenantModelContract | string): string {
     const id = typeof tenant === 'string' ? tenant : tenant.id
+    assertSafeIdentifier(id, 'tenant id')
     return `${getConfig().tenantSchemaPrefix}${id}`
   }
 
   async provision(tenant: TenantModelContract): Promise<void> {
+    const schema = this.schemaName(tenant)
     const { db } = await lucid()
-    await db.rawQuery(`CREATE SCHEMA IF NOT EXISTS "${this.schemaName(tenant)}"`)
+    await db.rawQuery(`CREATE SCHEMA IF NOT EXISTS "${schema}"`)
     await this.connect(tenant)
   }
 
   async destroy(tenant: TenantModelContract, opts: DestroyOptions = {}): Promise<void> {
+    const schema = this.schemaName(tenant)
     await this.disconnect(tenant)
     if (opts.keepData) return
     const { db } = await lucid()
-    await db.rawQuery(`DROP SCHEMA IF EXISTS "${this.schemaName(tenant)}" CASCADE`)
+    await db.rawQuery(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
   }
 
   async reset(tenant: TenantModelContract): Promise<void> {
+    const schema = this.schemaName(tenant)
     await this.disconnect(tenant)
     const { db } = await lucid()
-    await db.rawQuery(`DROP SCHEMA IF EXISTS "${this.schemaName(tenant)}" CASCADE`)
-    await db.rawQuery(`CREATE SCHEMA "${this.schemaName(tenant)}"`)
+    await db.rawQuery(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+    await db.rawQuery(`CREATE SCHEMA "${schema}"`)
     await this.connect(tenant)
   }
 

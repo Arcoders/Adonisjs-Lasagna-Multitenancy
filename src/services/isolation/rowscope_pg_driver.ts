@@ -7,6 +7,7 @@ import type {
   MigrateOptions,
   MigrateResult,
 } from './driver.js'
+import { assertSafeIdentifier } from './identifier.js'
 
 async function lucid() {
   const { default: db } = await import('@adonisjs/lucid/services/db')
@@ -42,6 +43,15 @@ export default class RowScopePgDriver implements IsolationDriver {
     this.#centralConnectionName = opts.centralConnectionName ?? 'tenant'
     this.#scopedTables = [...(opts.scopedTables ?? [])]
     this.#scopeColumn = opts.scopeColumn ?? 'tenant_id'
+    // Validate config-time inputs once at construction so a typo blows up
+    // at boot, not at the first DELETE under load. Each table can be a
+    // bare identifier or schema-qualified (`schema.table`).
+    for (const table of this.#scopedTables) {
+      for (const part of table.split('.')) {
+        assertSafeIdentifier(part, `rowScopeTables entry "${table}"`)
+      }
+    }
+    assertSafeIdentifier(this.#scopeColumn, 'rowScopeColumn')
   }
 
   connectionName(_tenantId: string): string {
@@ -56,6 +66,10 @@ export default class RowScopePgDriver implements IsolationDriver {
   async destroy(tenant: TenantModelContract, opts: DestroyOptions = {}): Promise<void> {
     if (opts.keepData) return
     if (this.#scopedTables.length === 0) return
+    // Defense in depth: even though tenant.id will be passed as a parameter
+    // (Lucid binds it), reject obviously malformed ids so they never reach
+    // the database in any context (logs, hooks, etc.).
+    assertSafeIdentifier(tenant.id, 'tenant id')
     const { db } = await lucid()
     const client = db.connection(this.#centralConnectionName)
     for (const table of this.#scopedTables) {
