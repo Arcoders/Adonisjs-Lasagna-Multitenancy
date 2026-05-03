@@ -46,16 +46,10 @@ export default class MultitenancyProvider {
     CentralBaseModel.connection = config.centralConnectionName
 
     const db = await this.app.container.make(Database)
-    BackofficeBaseModel.$adapter = new BackofficeAdapter(db)
-    TenantBaseModel.$adapter = new TenantAdapter(db)
-
-    const hooks = await this.app.container.make(HookRegistry)
-    hooks.loadDeclarative(config.hooks)
-
-    const bootstrappers = await this.app.container.make(BootstrapperRegistry)
-    if (!bootstrappers.has('cache')) bootstrappers.register(cacheBootstrapper)
-
     const drivers = await this.app.container.make(IsolationDriverRegistry)
+
+    // Register the configured isolation driver before wiring the adapter,
+    // because TenantAdapter consults the registry on every query.
     const choice = config.isolation?.driver ?? 'schema-pg'
     if (choice === 'schema-pg' && !drivers.has('schema-pg')) {
       drivers.register(
@@ -84,6 +78,15 @@ export default class MultitenancyProvider {
         { activate: true }
       )
     }
+
+    BackofficeBaseModel.$adapter = new BackofficeAdapter(db)
+    TenantBaseModel.$adapter = new TenantAdapter(db, drivers)
+
+    const hooks = await this.app.container.make(HookRegistry)
+    hooks.loadDeclarative(config.hooks)
+
+    const bootstrappers = await this.app.container.make(BootstrapperRegistry)
+    if (!bootstrappers.has('cache')) bootstrappers.register(cacheBootstrapper)
   }
 
   async start() {

@@ -11,10 +11,15 @@ test.group('SchemaPgDriver — naming', (group) => {
 
   test('connectionName combines prefix from config with tenant id', ({ assert }) => {
     const driver = new SchemaPgDriver()
-    assert.equal(driver.connectionName(fakeTenant('abc')), 'tenant_abc')
+    assert.equal(driver.connectionName('abc'), 'tenant_abc')
   })
 
-  test('schemaName combines schema prefix from config with tenant id', ({ assert }) => {
+  test('schemaName accepts a tenant id string', ({ assert }) => {
+    const driver = new SchemaPgDriver()
+    assert.equal(driver.schemaName('xyz'), 'tenant_xyz')
+  })
+
+  test('schemaName accepts a TenantModelContract', ({ assert }) => {
     const driver = new SchemaPgDriver()
     assert.equal(driver.schemaName(fakeTenant('xyz')), 'tenant_xyz')
   })
@@ -27,7 +32,7 @@ test.group('SchemaPgDriver — naming', (group) => {
   test('honors a custom prefix coming from config overrides', ({ assert }) => {
     setupTestConfig({ tenantConnectionNamePrefix: 'pool_', tenantSchemaPrefix: 'sch_' })
     const driver = new SchemaPgDriver()
-    assert.equal(driver.connectionName(fakeTenant('1')), 'pool_1')
-    assert.equal(driver.schemaName(fakeTenant('1')), 'sch_1')
+    assert.equal(driver.connectionName('1'), 'pool_1')
+    assert.equal(driver.schemaName('1'), 'sch_1')
   })
 })

@@ -4,6 +4,14 @@ import TenantAdapter from '../../../../src/models/adapters/tenant_adapter.js'
 import MissingTenantHeaderException from '../../../../src/exceptions/missing_tenant_header_exception.js'
 import { setConfig } from '../../../../src/config.js'
 import { testConfig } from '../../../helpers/config.js'
+import IsolationDriverRegistry from '../../../../src/services/isolation/registry.js'
+import SchemaPgDriver from '../../../../src/services/isolation/schema_pg_driver.js'
+
+function makeRegistry() {
+  const reg = new IsolationDriverRegistry()
+  reg.register(new SchemaPgDriver())
+  return reg
+}
 
 // Valid v4 UUIDs for use in tests
 const UUID1 = '11111111-1111-4111-8111-111111111111'
@@ -52,7 +60,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
 
   test('returns options.client directly when provided', ({ assert }) => {
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
     const client = { isClient: true }
 
     const result = adapter.modelConstructorClient({} as any, { client: client as any })
@@ -63,7 +71,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
 
   test('uses model connection when no HTTP context is active', ({ assert }) => {
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     adapter.modelConstructorClient({ connection: 'public' } as any)
 
@@ -72,7 +80,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
 
   test('uses options.connection over model connection when no context', ({ assert }) => {
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     adapter.modelConstructorClient({ connection: 'public' } as any, { connection: 'override_conn' })
 
@@ -84,7 +92,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ headers: { 'x-tenant-id': UUID1 } }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     adapter.modelConstructorClient({} as any)
 
@@ -97,7 +105,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ headers: { 'x-workspace-id': UUID1 } }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     adapter.modelConstructorClient({} as any)
 
@@ -110,7 +118,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ headers: { host: `${UUID2}.example.com` } }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     adapter.modelConstructorClient({} as any)
 
@@ -123,7 +131,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ url: `/${UUID3}/api/users` }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     adapter.modelConstructorClient({} as any)
 
@@ -136,7 +144,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ headers: { 'x-tenant-id': UUID1 } }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     adapter.modelConstructorClient({} as any)
 
@@ -150,7 +158,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ headers: { 'x-tenant-id': UUID1 } }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     adapter.modelConstructorClient({} as any, { connection: 'explicit_conn' })
 
@@ -162,7 +170,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ headers: {} }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     assert.throws(
       () => adapter.modelConstructorClient({} as any),
@@ -177,7 +185,7 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ headers: { 'x-tenant-id': 'not-a-uuid' } }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     assert.throws(
       () => adapter.modelConstructorClient({} as any),
@@ -191,8 +199,81 @@ test.group('TenantAdapter — modelConstructorClient', (group) => {
       request: makeRequest({ headers: { 'x-tenant-id': uuidV3 } }),
     })
     const db = makeMockDb()
-    const adapter = new TenantAdapter(db as any)
+    const adapter = new TenantAdapter(db as any, makeRegistry())
 
     assert.throws(() => adapter.modelConstructorClient({} as any), MissingTenantHeaderException as any)
+  })
+})
+
+test.group('TenantAdapter — tenancy.run() integration', (group) => {
+  let originalGet: typeof HttpContext.get
+
+  group.each.setup(() => {
+    setConfig({ ...testConfig, resolverStrategy: 'header' })
+    originalGet = HttpContext.get
+    ;(HttpContext as any).get = () => null
+  })
+
+  group.each.teardown(async () => {
+    ;(HttpContext as any).get = originalGet
+    const tenancyMod = await import('../../../../src/tenancy.js')
+    tenancyMod.__configureTenancyForTests({})
+  })
+
+  test('prefers tenancy.currentId() over HTTP context when both are present', async ({
+    assert,
+  }) => {
+    const tenancyMod = await import('../../../../src/tenancy.js')
+    const TenantLogContext = (
+      await import('../../../../src/services/tenant_log_context.js')
+    ).default
+    const BootstrapperRegistry = (
+      await import('../../../../src/services/bootstrapper_registry.js')
+    ).default
+
+    const logCtx = new TenantLogContext()
+    const registry = new BootstrapperRegistry()
+    tenancyMod.__configureTenancyForTests({ logCtx, registry })
+
+    // HTTP says one tenant, tenancy.run says another — tenancy wins.
+    ;(HttpContext as any).get = () => ({
+      request: makeRequest({ headers: { 'x-tenant-id': UUID1 } }),
+    })
+
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any, makeRegistry())
+
+    const fakeTenant = { id: UUID2 } as any
+    await tenancyMod.tenancy.run(fakeTenant, async () => {
+      adapter.modelConstructorClient({} as any)
+    })
+
+    assert.equal(db.lastCall, `tenant_${UUID2}`)
+  })
+
+  test('uses tenancy.currentId() with no HTTP context (queue/script path)', async ({
+    assert,
+  }) => {
+    const tenancyMod = await import('../../../../src/tenancy.js')
+    const TenantLogContext = (
+      await import('../../../../src/services/tenant_log_context.js')
+    ).default
+    const BootstrapperRegistry = (
+      await import('../../../../src/services/bootstrapper_registry.js')
+    ).default
+
+    const logCtx = new TenantLogContext()
+    const registry = new BootstrapperRegistry()
+    tenancyMod.__configureTenancyForTests({ logCtx, registry })
+
+    const db = makeMockDb()
+    const adapter = new TenantAdapter(db as any, makeRegistry())
+
+    const fakeTenant = { id: UUID3 } as any
+    await tenancyMod.tenancy.run(fakeTenant, async () => {
+      adapter.modelConstructorClient({} as any)
+    })
+
+    assert.equal(db.lastCall, `tenant_${UUID3}`)
   })
 })

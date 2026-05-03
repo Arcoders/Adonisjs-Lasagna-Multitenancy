@@ -16,7 +16,7 @@ test.group('RowScopePgDriver — naming and configuration', (group) => {
 
   test('connectionName returns the central/template connection name', ({ assert }) => {
     const driver = new RowScopePgDriver({ centralConnectionName: 'central' })
-    assert.equal(driver.connectionName(fakeTenant('any')), 'central')
+    assert.equal(driver.connectionName('any'), 'central')
   })
 
   test('default scope column is tenant_id', ({ assert }) => {

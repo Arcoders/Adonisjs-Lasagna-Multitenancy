@@ -49,13 +49,14 @@ export default class DatabasePgDriver implements IsolationDriver {
     this.#databasePrefix = opts.databasePrefix
   }
 
-  connectionName(tenant: TenantModelContract): string {
-    return `${getConfig().tenantConnectionNamePrefix}${tenant.id}`
+  connectionName(tenantId: string): string {
+    return `${getConfig().tenantConnectionNamePrefix}${tenantId}`
   }
 
-  databaseName(tenant: TenantModelContract): string {
+  databaseName(tenant: TenantModelContract | string): string {
+    const id = typeof tenant === 'string' ? tenant : tenant.id
     const prefix = this.#databasePrefix ?? getConfig().tenantSchemaPrefix
-    return `${prefix}${tenant.id}`
+    return `${prefix}${id}`
   }
 
   async provision(tenant: TenantModelContract): Promise<void> {
@@ -94,7 +95,7 @@ export default class DatabasePgDriver implements IsolationDriver {
 
   async connect(tenant: TenantModelContract) {
     const { db } = await lucid()
-    const name = this.connectionName(tenant)
+    const name = this.connectionName(tenant.id)
 
     if (db.manager.has(name)) {
       this.#touch(name)
@@ -118,7 +119,7 @@ export default class DatabasePgDriver implements IsolationDriver {
 
   async disconnect(tenant: TenantModelContract): Promise<void> {
     const { db } = await lucid()
-    const name = this.connectionName(tenant)
+    const name = this.connectionName(tenant.id)
     this.#lru.delete(name)
     if (db.manager.has(name)) {
       await db.manager.close(name)
@@ -134,7 +135,7 @@ export default class DatabasePgDriver implements IsolationDriver {
     await this.connect(tenant)
     const runner = new MigrationRunner(db, app, {
       ...opts,
-      connectionName: this.connectionName(tenant),
+      connectionName: this.connectionName(tenant.id),
     })
     await runner.run()
     if (runner.error) throw runner.error

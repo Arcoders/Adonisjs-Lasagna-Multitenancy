@@ -44,7 +44,7 @@ export default class RowScopePgDriver implements IsolationDriver {
     this.#scopeColumn = opts.scopeColumn ?? 'tenant_id'
   }
 
-  connectionName(_tenant: TenantModelContract): string {
+  connectionName(_tenantId: string): string {
     // All tenants share the same physical connection.
     return this.#centralConnectionName
   }

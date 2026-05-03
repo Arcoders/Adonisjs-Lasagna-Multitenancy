@@ -77,11 +77,11 @@ export interface IsolationDriver {
   disconnect(tenant: TenantModelContract): Promise<void>
 
   /**
-   * The deterministic Lucid connection name used for this tenant. Callers
-   * (TenantAdapter, ReadReplicaService, custom code) use this rather than
-   * building the name themselves.
+   * The deterministic Lucid connection name used for this tenant. Takes
+   * `tenantId` (not the full model) so synchronous callers like
+   * `TenantAdapter` can resolve the name without loading the model.
    */
-  connectionName(tenant: TenantModelContract): string
+  connectionName(tenantId: string): string
 
   /**
    * Run migrations against the tenant's storage. For drivers without

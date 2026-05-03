@@ -16,19 +16,20 @@ test.group('DatabasePgDriver — naming', (group) => {
 
   test('connectionName uses the shared tenantConnectionNamePrefix', ({ assert }) => {
     const driver = new DatabasePgDriver()
-    assert.equal(driver.connectionName(fakeTenant('abc')), 'tenant_abc')
+    assert.equal(driver.connectionName('abc'), 'tenant_abc')
   })
 
-  test('databaseName falls back to tenantSchemaPrefix when no override given', ({
+  test('databaseName accepts a tenant id string and a TenantModelContract', ({
     assert,
   }) => {
     const driver = new DatabasePgDriver()
+    assert.equal(driver.databaseName('xyz'), 'tenant_xyz')
     assert.equal(driver.databaseName(fakeTenant('xyz')), 'tenant_xyz')
   })
 
   test('databaseName honors a constructor-level prefix override', ({ assert }) => {
     const driver = new DatabasePgDriver({ databasePrefix: 'app_db_' })
-    assert.equal(driver.databaseName(fakeTenant('1')), 'app_db_1')
+    assert.equal(driver.databaseName('1'), 'app_db_1')
   })
 
   test('databaseName picks up runtime config changes when no override given', ({
@@ -36,6 +37,6 @@ test.group('DatabasePgDriver — naming', (group) => {
   }) => {
     setupTestConfig({ tenantSchemaPrefix: 'live_' })
     const driver = new DatabasePgDriver()
-    assert.equal(driver.databaseName(fakeTenant('q')), 'live_q')
+    assert.equal(driver.databaseName('q'), 'live_q')
   })
 })
