@@ -80,7 +80,7 @@ function tenantPrefixForBroadcast(): string {
 export async function tenantBroadcast(channel: string, payload?: unknown): Promise<void> {
   const prefix = tenantPrefixForBroadcast()
   const transmit = await lazyTransmit()
-  await transmit.broadcast(`${prefix}${stripLeadingSlash(channel)}`, payload)
+  await transmit.broadcast(`${prefix}${normalizeChannel(channel)}`, payload)
 }
 
 /**
@@ -89,9 +89,37 @@ export async function tenantBroadcast(channel: string, payload?: unknown): Promi
  * server) and want the canonical wire name to ship to the front end.
  */
 export function tenantChannel(channel: string): string {
-  return `${tenantPrefixForBroadcast()}${stripLeadingSlash(channel)}`
+  return `${tenantPrefixForBroadcast()}${normalizeChannel(channel)}`
 }
 
-function stripLeadingSlash(s: string): string {
-  return s.startsWith('/') ? s.slice(1) : s
+/**
+ * Channel suffix safety: alphanumerics, dot, dash, underscore, and `/` for
+ * sub-channels. Rejects `..` segments (cross-tenant escape) and absolute
+ * paths. Channels are not file paths but Transmit treats `/` as a hierarchy
+ * separator, so an unfiltered `..` could broadcast into a sibling tenant's
+ * namespace.
+ */
+const CHANNEL_SAFE = /^[a-zA-Z0-9._\-/]+$/
+
+function normalizeChannel(channel: string): string {
+  if (typeof channel !== 'string' || channel.length === 0) {
+    throw new Error('tenantBroadcast/tenantChannel: channel must be a non-empty string')
+  }
+  const stripped = channel.startsWith('/') ? channel.slice(1) : channel
+  if (!CHANNEL_SAFE.test(stripped)) {
+    throw new Error(
+      `Refusing unsafe broadcast channel "${channel}". Channels must match /^[a-zA-Z0-9._\\-/]+$/.`
+    )
+  }
+  // `..` as a path segment can escape the tenant prefix in any system that
+  // treats `/` hierarchically. We reject it as a whole-segment match.
+  for (const segment of stripped.split('/')) {
+    if (segment === '..' || segment === '.') {
+      throw new Error(
+        `Refusing broadcast channel "${channel}" containing a "${segment}" segment ` +
+          `(would escape the per-tenant namespace).`
+      )
+    }
+  }
+  return stripped
 }

@@ -37,7 +37,8 @@ export default class UniversalMiddleware {
     let result
     try {
       result = await resolveTenant(request)
-    } catch {
+    } catch (err) {
+      await warn('resolver_failed', err)
       return null
     }
     if (!result) return null
@@ -46,6 +47,8 @@ export default class UniversalMiddleware {
     try {
       repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
     } catch {
+      // Repo isn't bound (typical in unit tests / early boot). Silent: this
+      // is expected, not a degradation.
       return null
     }
     if (!repo) return null
@@ -58,7 +61,10 @@ export default class UniversalMiddleware {
       } else if (result.type === 'domain') {
         tenant = await repo.findByDomain(result.domain)
       }
-    } catch {
+    } catch (err) {
+      // Repo lookup failed (DB down, etc.). Falling through to "central
+      // mode" hides this from the user, so make sure ops sees it.
+      await warn('repository_lookup_failed', err)
       return null
     }
 
@@ -69,10 +75,35 @@ export default class UniversalMiddleware {
     try {
       const driver = await getActiveDriver()
       await driver.connect(tenant)
-    } catch {
+    } catch (err) {
+      await warn('driver_connect_failed', err)
       return null
     }
     __setMemoizedTenant(request, tenant)
     return tenant
   }
+}
+
+/**
+ * Best-effort warn: if the logger isn't available (early boot, unit tests),
+ * fall back to stderr. We never let logging itself break the middleware.
+ */
+async function warn(kind: string, err: unknown): Promise<void> {
+  try {
+    const logger = await app.container.make('logger').catch(() => undefined)
+    const message = (err as any)?.message ?? String(err)
+    if (logger) {
+      logger.warn(
+        { middleware: 'universal', kind, error: message },
+        'multitenancy: universal middleware swallowed an error and degraded to central mode'
+      )
+      return
+    }
+  } catch {
+    // ignore
+  }
+  console.warn(
+    `[multitenancy] universal middleware degraded (${kind}):`,
+    (err as any)?.message ?? err
+  )
 }

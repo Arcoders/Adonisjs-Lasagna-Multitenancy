@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { getConfig } from '../config.js'
 import CircuitOpenException from '../exceptions/circuit_open_exception.js'
 import TenantNotReadyException from '../exceptions/tenant_not_ready_exception.js'
@@ -47,6 +48,14 @@ export default class TenantGuardMiddleware {
     if (!cfg?.bypassToken) return false
     const headerName = cfg.bypassHeader ?? 'x-tenant-bypass-maintenance'
     const presented = request.header(headerName)
-    return typeof presented === 'string' && presented === cfg.bypassToken
+    if (typeof presented !== 'string') return false
+    // Constant-time compare to keep the secret out of timing side channels.
+    // The length-prefix check is necessary because timingSafeEqual throws
+    // on length mismatch — but doing it explicitly still leaks length, which
+    // is acceptable for a fixed-size operator-rotated token.
+    const a = Buffer.from(presented)
+    const b = Buffer.from(cfg.bypassToken)
+    if (a.length !== b.length) return false
+    return timingSafeEqual(a, b)
   }
 }

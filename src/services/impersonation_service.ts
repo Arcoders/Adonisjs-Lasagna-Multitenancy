@@ -9,8 +9,16 @@ import type {
 } from '../types/impersonation.js'
 
 const NAMESPACE = 'impersonation'
-const DEFAULT_DURATION = 60 * 60
+const DEFAULT_DURATION = 15 * 60
 const MAX_DURATION = 24 * 60 * 60
+/**
+ * Permissive enough to accept UUIDs, ULIDs, and bigint-as-string user ids
+ * but strict enough to keep the audit trail readable and reject embedded
+ * control chars or path-like values. Apps with looser id formats can pass
+ * `validateTargetUserId: false` (added if/when needed) — for now we err on
+ * the side of safety.
+ */
+const TARGET_USER_ID_RE = /^[a-zA-Z0-9._:@-]{1,128}$/
 
 /**
  * Stateless impersonation service. Issues short-lived tokens that bind an
@@ -36,6 +44,18 @@ export default class ImpersonationService {
    * the package cache (BentoCache → Redis L2) with TTL = duration.
    */
   async start(opts: ImpersonationStartOptions): Promise<ImpersonationStartResult> {
+    if (!TARGET_USER_ID_RE.test(opts.targetUserId)) {
+      throw new Error(
+        `ImpersonationService: targetUserId "${opts.targetUserId}" does not match ` +
+          `/^[a-zA-Z0-9._:@-]{1,128}$/. Pass a clean opaque id, not a path or arbitrary string.`
+      )
+    }
+    if (!TARGET_USER_ID_RE.test(opts.adminId)) {
+      throw new Error(
+        `ImpersonationService: adminId "${opts.adminId}" does not match ` +
+          `/^[a-zA-Z0-9._:@-]{1,128}$/.`
+      )
+    }
     const cfg = getConfig().impersonation
     const requested = opts.durationSeconds ?? cfg?.defaultDuration ?? DEFAULT_DURATION
     const max = cfg?.maxDuration ?? MAX_DURATION
@@ -136,6 +156,32 @@ export default class ImpersonationService {
       // Cache TTL should beat us to it, but guard anyway.
       await ns.delete({ key: sessionId })
       return null
+    }
+
+    // Audit the FIRST successful verify so the trail records when the
+    // session was actually used (start vs use can be hours apart). Subsequent
+    // verifies are silent — we only need one entry per session.
+    if (!session.firstVerifyAt) {
+      const remainingMs = Math.max(session.expiresAt - Date.now(), 1000)
+      session.firstVerifyAt = new Date().toISOString()
+      try {
+        await ns.set({ key: sessionId, value: session, ttl: remainingMs })
+        await this.#audit({
+          tenantId: session.tenantId,
+          actorId: session.adminId,
+          actorType: session.adminType,
+          action: 'admin:impersonate:first-use',
+          ipAddress: session.ipAddress,
+          metadata: {
+            sessionId: session.id,
+            targetUserId: session.targetUserId,
+            firstVerifyAt: session.firstVerifyAt,
+          },
+        })
+      } catch {
+        // Audit / cache write failures must not break verify — the session
+        // is still valid; we just lose the first-use audit row.
+      }
     }
 
     return {

@@ -19,6 +19,18 @@ import TenantEnteredMaintenance from '../events/tenant_entered_maintenance.js'
 import TenantExitedMaintenance from '../events/tenant_exited_maintenance.js'
 import ImpersonationService from '../services/impersonation_service.js'
 
+/**
+ * Resolver for the acting admin id. Wired by `multitenancyAdminRoutes(...)`.
+ * Until set, the impersonation endpoints refuse to issue tokens — we never
+ * accept an `adminId` from the request body, since that would let any
+ * caller forge the audit trail.
+ */
+type AdminActorResolver = (ctx: HttpContext) => string | null | Promise<string | null>
+let adminActorResolver: AdminActorResolver | null = null
+export function __setAdminActorResolver(fn: AdminActorResolver | null): void {
+  adminActorResolver = fn
+}
+
 const VALID_STATUSES: TenantStatus[] = [
   'provisioning',
   'active',
@@ -181,15 +193,29 @@ export default class AdminController {
     return response.ok({ data: serialize(tenant) })
   }
 
-  async startImpersonation({ params, request, response }: HttpContext) {
+  async startImpersonation(ctx: HttpContext) {
+    const { params, request, response } = ctx
+    if (!adminActorResolver) {
+      // Without an actor resolver we'd have to trust `adminId` from the
+      // request body — which means anyone hitting this endpoint could forge
+      // the audit trail. Refuse loudly so the operator wires the hook.
+      return response.notImplemented({
+        error: 'admin_actor_resolver_not_configured',
+        hint: "Pass `resolveAdminActor: ({ auth }) => auth.user?.id` to multitenancyAdminRoutes()",
+      })
+    }
+    const adminId = await adminActorResolver(ctx)
+    if (!adminId) {
+      return response.unauthorized({ error: 'admin_actor_unresolved' })
+    }
+
     const repo = (await app.container.make(TENANT_REPOSITORY as any)) as TenantRepositoryContract
     const tenant = await repo.findById(params.id)
     if (!tenant) return response.notFound({ error: 'tenant_not_found' })
 
     const userId = String(request.input('userId') ?? '').trim()
-    const adminId = String(request.input('adminId') ?? '').trim()
-    if (!userId || !adminId) {
-      return response.badRequest({ error: 'userId_and_adminId_required' })
+    if (!userId) {
+      return response.badRequest({ error: 'userId_required' })
     }
     const durationSeconds = request.input('durationSeconds')
     const reason = request.input('reason') ?? null

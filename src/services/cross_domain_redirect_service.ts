@@ -80,6 +80,7 @@ export default class CrossDomainRedirectService {
 
   /** Hostname for a tenant's subdomain on the configured base domain. */
   toTenantSubdomainHost(slug: string): string {
+    assertSafeHostLabel(slug, 'tenant slug')
     const base = this.#baseDomain()
     return `${slug}.${base}`
   }
@@ -90,9 +91,61 @@ export default class CrossDomainRedirectService {
   }
 
   #assemble(host: string, path: string, opts: BuildUrlOptions): string {
-    const protocol = opts.protocol ?? 'https'
-    const portSuffix = opts.port ? `:${opts.port}` : ''
-    const normalizedPath = path.startsWith('/') ? path : `/${path}`
+    assertSafeHost(host)
+    const protocol = opts.protocol === 'http' ? 'http' : 'https'
+    const portSuffix = opts.port ? `:${assertSafePort(opts.port)}` : ''
+    const normalizedPath = normalizeRedirectPath(path)
     return `${protocol}://${host}${portSuffix}${normalizedPath}`
   }
+}
+
+/**
+ * RFC-1123-ish hostname validator. Accepts only ASCII letters, digits,
+ * dots, and dashes; rejects anything that could allow URL parser tricks
+ * (`@`, `#`, `/`, `\`, `?`, ` `, control chars, embedded credentials).
+ *
+ * Why strict: `tenant.customDomain` and `slug` are interpolated directly
+ * into a Location header. Without this guard, a value like
+ * `evil.com#@trusted.com` or one containing CR/LF would let an attacker
+ * who controls those fields craft an open redirect or smuggle a header.
+ * `customDomain` is admin-controlled, but defense-in-depth still applies.
+ */
+const HOST_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i
+const HOST_LABEL_RE = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i
+
+function assertSafeHost(host: string): void {
+  if (typeof host !== 'string' || host.length === 0 || host.length > 253 || !HOST_RE.test(host)) {
+    throw new Error(`Refusing to build URL with unsafe host "${host}".`)
+  }
+}
+
+function assertSafeHostLabel(label: string, kind: string): void {
+  if (typeof label !== 'string' || !HOST_LABEL_RE.test(label)) {
+    throw new Error(`Refusing to build URL with unsafe ${kind} "${label}".`)
+  }
+}
+
+function assertSafePort(port: number): number {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Refusing to build URL with invalid port "${port}".`)
+  }
+  return port
+}
+
+/**
+ * Reject any path containing CR/LF (header smuggling) or starting with `//`
+ * (protocol-relative URL → bypasses the explicit host we just validated).
+ */
+function normalizeRedirectPath(path: string): string {
+  if (typeof path !== 'string') {
+    throw new Error('Refusing to build URL with non-string path.')
+  }
+  if (/[\r\n]/.test(path)) {
+    throw new Error('Refusing to build URL: path contains CR/LF.')
+  }
+  const withSlash = path.startsWith('/') ? path : `/${path}`
+  if (withSlash.startsWith('//')) {
+    throw new Error('Refusing to build URL: protocol-relative path "//..." would bypass host.')
+  }
+  return withSlash
 }

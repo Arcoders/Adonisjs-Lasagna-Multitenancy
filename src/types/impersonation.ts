@@ -23,6 +23,12 @@ export interface ImpersonationSession {
   expiresAt: number
   /** Optional source IP recorded for the audit trail. */
   ipAddress: string | null
+  /**
+   * Set on the first successful `verify()` call. Lets the service emit a
+   * single `admin:impersonate:first-use` audit entry without spamming the
+   * log on every subsequent request in the session.
+   */
+  firstVerifyAt?: string | null
 }
 
 /** Public context derived from a verified impersonation token. */

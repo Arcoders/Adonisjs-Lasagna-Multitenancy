@@ -1,11 +1,25 @@
 import router from '@adonisjs/core/services/router'
-import AdminController from './admin_controller.js'
+import type { HttpContext } from '@adonisjs/core/http'
+import AdminController, { __setAdminActorResolver } from './admin_controller.js'
 
 export type AdminRouteMiddleware =
   | string
   | string[]
   | ((...args: any[]) => any)
   | Array<string | ((...args: any[]) => any)>
+
+/**
+ * Hook that resolves the acting admin's id from the authenticated request.
+ * Required when wiring impersonation endpoints — the package refuses to
+ * trust an `adminId` field from the request body, since that would let any
+ * caller falsify the audit trail. Return `null` to deny.
+ *
+ * @example
+ *   resolveAdminActor: ({ auth }) => auth.user?.id ?? null
+ */
+export type AdminActorResolver = (
+  ctx: HttpContext
+) => string | null | Promise<string | null>
 
 export interface MultitenancyAdminRoutesOptions {
   /**
@@ -19,6 +33,13 @@ export interface MultitenancyAdminRoutesOptions {
    * are PUBLIC — securing them is the consumer's responsibility.
    */
   middleware?: AdminRouteMiddleware
+  /**
+   * REQUIRED if you mount the impersonation endpoints. Must extract the
+   * acting admin id from the authenticated context — typically
+   * `({ auth }) => auth.user?.id`. NEVER read it from the request body.
+   * Without this hook, the impersonation endpoint returns 501.
+   */
+  resolveAdminActor?: AdminActorResolver
 }
 
 const DEFAULT_PREFIX = '/admin/multitenancy'
@@ -45,7 +66,11 @@ const DEFAULT_PREFIX = '/admin/multitenancy'
  *   GET    /health/report                 DoctorService.run() report
  */
 export function multitenancyAdminRoutes(options: MultitenancyAdminRoutesOptions = {}): void {
-  const { prefix = DEFAULT_PREFIX, middleware } = options
+  const { prefix = DEFAULT_PREFIX, middleware, resolveAdminActor } = options
+
+  if (resolveAdminActor) {
+    __setAdminActorResolver(resolveAdminActor)
+  }
 
   const define = () => {
     const c = new AdminController()
