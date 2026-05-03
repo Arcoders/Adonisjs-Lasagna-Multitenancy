@@ -55,6 +55,13 @@ export default class CloneService {
       // next driver.connect() call to open a fresh session.
       await driver.disconnect(destination).catch(() => {})
 
+      // Flip the destination to `active` once provisioning, migrations, and
+      // (optionally) the row copy have all succeeded. Pre-v2 this was
+      // implicit in `tenant.install()`; post-driver-system the package no
+      // longer touches the tenant row, so the caller owns the status.
+      destination.status = 'active'
+      await destination.save()
+
       logger.info(
         { sourceId: source.id, destId: destination.id, tablesCopied, rowsCopied },
         'Tenant clone completed'
