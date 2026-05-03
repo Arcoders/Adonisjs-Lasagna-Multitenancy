@@ -48,6 +48,15 @@ export interface TenantModelContract<TMeta extends object = TenantMetadata> {
   save(): Promise<TenantModelContract<TMeta>>
 }
 
+export interface EachOptions {
+  /** Page size for the cursor. Default: 100. */
+  batchSize?: number
+  /** Filter by status. Defaults to all statuses. */
+  statuses?: TenantStatus[]
+  /** Include soft-deleted tenants. Default: false. */
+  includeDeleted?: boolean
+}
+
 export interface TenantRepositoryContract<TMeta extends object = TenantMetadata> {
   findById(id: string, includeDeleted?: boolean): Promise<TenantModelContract<TMeta> | null>
   findByIdOrFail(id: string, includeDeleted?: boolean): Promise<TenantModelContract<TMeta>>
@@ -57,6 +66,15 @@ export interface TenantRepositoryContract<TMeta extends object = TenantMetadata>
     statuses?: TenantStatus[]
   }): Promise<TenantModelContract<TMeta>[]>
   whereIn(ids: string[], includeDeleted?: boolean): Promise<TenantModelContract<TMeta>[]>
+  /**
+   * Iterate over tenants in cursor-paginated batches. Memory-safe for large
+   * tenant counts. The callback runs sequentially per tenant; throw inside it
+   * to abort iteration.
+   */
+  each(
+    callback: (tenant: TenantModelContract<TMeta>) => Promise<void> | void,
+    options?: EachOptions
+  ): Promise<void>
   create(data: {
     name: string
     email: string

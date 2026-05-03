@@ -1,4 +1,5 @@
 import type {
+  EachOptions,
   TenantModelContract,
   TenantRepositoryContract,
   TenantStatus,
@@ -75,6 +76,19 @@ export class MockTenantRepository<TMeta extends object = TenantMetadata>
       if (!includeDeleted && t.isDeleted) return false
       return true
     })
+  }
+
+  async each(
+    callback: (tenant: TenantModelContract<TMeta>) => Promise<void> | void,
+    options: EachOptions = {}
+  ): Promise<void> {
+    const matches = await this.all({
+      includeDeleted: options.includeDeleted,
+      statuses: options.statuses,
+    })
+    for (const tenant of matches) {
+      await callback(tenant)
+    }
   }
 
   async create(data: {

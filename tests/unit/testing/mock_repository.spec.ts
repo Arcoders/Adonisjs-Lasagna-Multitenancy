@@ -122,3 +122,95 @@ test.group('MockTenantRepository — mutations', (group) => {
     assert.equal(repo.count(), 0)
   })
 })
+
+test.group('MockTenantRepository — each() cursor', (group) => {
+  group.each.setup(() => setupTestConfig())
+
+  test('each() visits every non-deleted tenant exactly once', async ({ assert }) => {
+    const repo = mockTenantRepository(
+      Array.from({ length: 5 }, () => buildTestTenant({ status: 'active' }))
+    )
+    const visited: string[] = []
+    await repo.each((t) => {
+      visited.push(t.id)
+    })
+    assert.lengthOf(visited, 5)
+    assert.equal(new Set(visited).size, 5)
+  })
+
+  test('each() awaits async callbacks sequentially', async ({ assert }) => {
+    const repo = mockTenantRepository([
+      buildTestTenant(),
+      buildTestTenant(),
+      buildTestTenant(),
+    ])
+    const order: number[] = []
+    let i = 0
+    await repo.each(async () => {
+      const me = ++i
+      await new Promise((r) => setTimeout(r, 5))
+      order.push(me)
+    })
+    assert.deepEqual(order, [1, 2, 3])
+  })
+
+  test('each() skips soft-deleted by default', async ({ assert }) => {
+    const { DateTime } = await import('luxon')
+    const alive = buildTestTenant()
+    const dead = buildTestTenant({ deletedAt: DateTime.now() })
+    const repo = mockTenantRepository([alive, dead])
+
+    const visited: string[] = []
+    await repo.each((t) => {
+      visited.push(t.id)
+    })
+    assert.deepEqual(visited, [alive.id])
+  })
+
+  test('each({ includeDeleted: true }) visits soft-deleted', async ({ assert }) => {
+    const { DateTime } = await import('luxon')
+    const alive = buildTestTenant()
+    const dead = buildTestTenant({ deletedAt: DateTime.now() })
+    const repo = mockTenantRepository([alive, dead])
+
+    const visited: string[] = []
+    await repo.each(
+      (t) => {
+        visited.push(t.id)
+      },
+      { includeDeleted: true }
+    )
+    assert.deepEqual(visited.sort(), [alive.id, dead.id].sort())
+  })
+
+  test('each({ statuses }) filters by status', async ({ assert }) => {
+    const active = buildTestTenant({ status: 'active' })
+    const suspended = buildTestTenant({ status: 'suspended' })
+    const repo = mockTenantRepository([active, suspended])
+
+    const visited: string[] = []
+    await repo.each(
+      (t) => {
+        visited.push(t.id)
+      },
+      { statuses: ['suspended'] }
+    )
+    assert.deepEqual(visited, [suspended.id])
+  })
+
+  test('each() aborts iteration when callback throws', async ({ assert }) => {
+    const t1 = buildTestTenant()
+    const t2 = buildTestTenant()
+    const t3 = buildTestTenant()
+    const repo = mockTenantRepository([t1, t2, t3])
+
+    const visited: string[] = []
+    await assert.rejects(() =>
+      repo.each((t) => {
+        visited.push(t.id)
+        if (visited.length === 2) throw new Error('stop')
+      })
+    )
+    assert.lengthOf(visited, 2)
+  })
+})
