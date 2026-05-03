@@ -6,6 +6,9 @@ import { BackofficeAdapter, TenantAdapter } from '../models/adapters/index.js'
 import { BackofficeBaseModel, TenantBaseModel, CentralBaseModel } from '../models/base/index.js'
 import BootstrapperRegistry from '../services/bootstrapper_registry.js'
 import cacheBootstrapper from '../services/bootstrappers/cache_bootstrapper.js'
+import driveBootstrapper from '../services/bootstrappers/drive_bootstrapper.js'
+import mailBootstrapper from '../services/bootstrappers/mail_bootstrapper.js'
+import sessionBootstrapper from '../services/bootstrappers/session_bootstrapper.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
 import HookRegistry from '../services/hook_registry.js'
 import IsolationDriverRegistry from '../services/isolation/registry.js'
@@ -87,6 +90,40 @@ export default class MultitenancyProvider {
 
     const bootstrappers = await this.app.container.make(BootstrapperRegistry)
     if (!bootstrappers.has('cache')) bootstrappers.register(cacheBootstrapper)
+    await this.#registerOptionalBootstrappers(bootstrappers)
+  }
+
+  /**
+   * Auto-register the bootstrappers whose peer dependencies are present.
+   * Each `import(...)` is wrapped in a try/catch so missing optional
+   * peers (`@adonisjs/drive`, `@adonisjs/mail`, `@adonisjs/session`)
+   * don't fail boot — they just skip the corresponding bootstrapper.
+   */
+  async #registerOptionalBootstrappers(bootstrappers: BootstrapperRegistry): Promise<void> {
+    const candidates = [
+      { name: 'drive', module: '@adonisjs/drive/services/main', bootstrapper: driveBootstrapper },
+      { name: 'mail', module: '@adonisjs/mail/services/main', bootstrapper: mailBootstrapper },
+      {
+        name: 'session',
+        module: '@adonisjs/session/services/main',
+        bootstrapper: sessionBootstrapper,
+      },
+    ] as const
+
+    const { default: logger } = await import('@adonisjs/core/services/logger')
+
+    for (const c of candidates) {
+      if (bootstrappers.has(c.name)) continue
+      try {
+        await import(c.module)
+        bootstrappers.register(c.bootstrapper)
+      } catch {
+        logger.debug(
+          { bootstrapper: c.name, peerDep: c.module },
+          'multitenancy: peer dependency not installed; skipping bootstrapper'
+        )
+      }
+    }
   }
 
   async start() {

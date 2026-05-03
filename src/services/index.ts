@@ -45,6 +45,20 @@ export {
   createCacheBootstrapper,
   tenantCache,
   CACHE_NAMESPACE_PREFIX,
+  driveBootstrapper,
+  createDriveBootstrapper,
+  tenantDisk,
+  tenantPrefix,
+  TENANT_DRIVE_PREFIX,
+  mailBootstrapper,
+  createMailBootstrapper,
+  tenantMailer,
+  TENANT_MAIL_HEADER,
+  sessionBootstrapper,
+  createSessionBootstrapper,
+  tenantSession,
+  tenantSessionKey,
+  TENANT_SESSION_PREFIX,
 } from './bootstrappers/index.js'
 export { DoctorService, builtInChecks } from './doctor/index.js'
 export type {
