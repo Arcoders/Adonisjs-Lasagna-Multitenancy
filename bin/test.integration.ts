@@ -26,9 +26,22 @@ new Ignitor(FIXTURE_ROOT, { importer: IMPORTER })
     const { runnerHooks, ...config } = await import('../tests/integration/bootstrap.js')
 
     processCLIArgs(process.argv.splice(2))
+    // Rewrite the suite globs to be cwd-relative. The rcFile uses
+    // `'../../tests/...'` so the AdonisJS test command (run with cwd at
+    // the fixture root) can find them, but our runner spawns from the
+    // repo root, where the same glob would point outside the package.
+    // We mutate the suite definition rather than adding a top-level
+    // `files` list so the suite-level `configureSuite` hook (which boots
+    // the test HTTP server) still applies.
+    const suites = (app.rcFile.tests.suites ?? []).map((s) => ({
+      ...s,
+      files: ['tests/integration/**/*.spec.ts'],
+      directories: ['tests/integration'],
+    }))
     configure({
       ...app.rcFile.tests,
       ...config,
+      suites,
       ...{
         setup: runnerHooks.setup,
         teardown: runnerHooks.teardown.concat([() => app.terminate()]),

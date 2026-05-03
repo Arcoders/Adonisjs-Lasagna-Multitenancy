@@ -1,7 +1,7 @@
 import { test } from '@japa/runner'
 import redis from '@adonisjs/redis/services/main'
 import { DateTime } from 'luxon'
-import MetricsService from '../../../src/services/metrics_service.js'
+import { MetricsService } from '@adonisjs-lasagna/multitenancy/services'
 
 const TODAY = DateTime.utc().toFormat('yyyy-MM-dd')
 

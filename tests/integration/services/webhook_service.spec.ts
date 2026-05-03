@@ -1,8 +1,8 @@
 import { test } from '@japa/runner'
 import { randomUUID } from 'node:crypto'
 import { createHmac } from 'node:crypto'
-import WebhookService from '../../../src/services/webhook_service.js'
-import { encrypt } from '../../../src/utils/crypto.js'
+import { WebhookService } from '@adonisjs-lasagna/multitenancy/services'
+import { encrypt } from '@adonisjs-lasagna/multitenancy'
 
 process.env.APP_KEY = process.env.APP_KEY ?? 'test-app-key-for-webhooks-tests!'
 

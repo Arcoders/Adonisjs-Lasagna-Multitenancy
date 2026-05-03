@@ -110,33 +110,32 @@ export default class MultitenancyProvider {
   }
 
   /**
-   * Auto-register the bootstrappers whose peer dependencies are present.
-   * Each `import(...)` is wrapped in a try/catch so missing optional
-   * peers (`@adonisjs/drive`, `@adonisjs/mail`, `@adonisjs/session`)
-   * don't fail boot — they just skip the corresponding bootstrapper.
+   * Auto-register the bootstrappers whose peer dependencies are wired
+   * into the host app. We probe `container.hasBinding(...)` instead of
+   * importing the service module directly, because the service-main
+   * files in `@adonisjs/mail` etc. eagerly `container.make()` the
+   * binding — which throws if the host hasn't loaded the provider that
+   * registers it. Detection via the binding name is both cheaper and
+   * exact: the bootstrapper is only useful when the host app actually
+   * configured the underlying service.
    */
   async #registerOptionalBootstrappers(bootstrappers: BootstrapperRegistry): Promise<void> {
     const candidates = [
-      { name: 'drive', module: '@adonisjs/drive/services/main', bootstrapper: driveBootstrapper },
-      { name: 'mail', module: '@adonisjs/mail/services/main', bootstrapper: mailBootstrapper },
-      {
-        name: 'session',
-        module: '@adonisjs/session/services/main',
-        bootstrapper: sessionBootstrapper,
-      },
+      { name: 'drive', binding: 'drive.manager', bootstrapper: driveBootstrapper },
+      { name: 'mail', binding: 'mail.manager', bootstrapper: mailBootstrapper },
+      { name: 'session', binding: 'session', bootstrapper: sessionBootstrapper },
     ] as const
 
-    const { default: logger } = await import('@adonisjs/core/services/logger')
+    const logger = await this.app.container.make('logger').catch(() => undefined)
 
     for (const c of candidates) {
       if (bootstrappers.has(c.name)) continue
-      try {
-        await import(c.module)
+      if (this.app.container.hasBinding(c.binding)) {
         bootstrappers.register(c.bootstrapper)
-      } catch {
-        logger.debug(
-          { bootstrapper: c.name, peerDep: c.module },
-          'multitenancy: peer dependency not installed; skipping bootstrapper'
+      } else {
+        logger?.debug(
+          { bootstrapper: c.name, binding: c.binding },
+          'multitenancy: peer service not bound; skipping bootstrapper'
         )
       }
     }

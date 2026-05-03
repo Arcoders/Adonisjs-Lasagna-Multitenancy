@@ -125,7 +125,9 @@ export default class DatabasePgDriver implements IsolationDriver {
     const name = this.connectionName(tenant.id)
     this.#lru.delete(name)
     if (db.manager.has(name)) {
-      await db.manager.close(name)
+      // `release` closes the pool and unregisters the connection;
+      // `close` only ends the pool and would leak the registration.
+      await db.manager.release(name)
     }
   }
 
@@ -167,11 +169,11 @@ export default class DatabasePgDriver implements IsolationDriver {
     this.#lru.set(name, Date.now())
   }
 
-  #evictIfNeeded(db: { manager: { close(name: string): Promise<void> } }): void {
+  #evictIfNeeded(db: { manager: { release(name: string): Promise<void> } }): void {
     if (this.#lru.size <= MAX_TENANT_CONNECTIONS) return
     const oldest = this.#lru.keys().next().value
     if (!oldest) return
     this.#lru.delete(oldest)
-    db.manager.close(oldest).catch(() => {})
+    db.manager.release(oldest).catch(() => {})
   }
 }

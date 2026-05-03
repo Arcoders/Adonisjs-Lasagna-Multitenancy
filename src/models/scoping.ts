@@ -116,13 +116,28 @@ export function withTenantScope<TBase extends LucidBaseModelClass>(Base: TBase):
       })
 
       this.before('fetch', (query: any) => {
-        // `before('fetch')` also fires for query-builder-initiated update()
-        // and delete() in Lucid, so the scope predicate is applied there
-        // too — without this, `Model.query().delete()` outside a tenancy
-        // scope would silently wipe rows across tenants.
-        const id = requireScope('fetch/query')
+        const id = requireScope('fetch')
         if (id) query.where(column, id)
       })
+
+      // Lucid's `before:fetch` only fires when knex's `_method === 'select'`,
+      // so query-builder DELETE/UPDATE wouldn't get scoped through it.
+      // Wrap the static `query()` factory to inject the scope predicate at
+      // construction time — that way `Model.query().delete()` and
+      // `Model.query().update({...})` inherit the same `where tenant_id = ?`
+      // guard as fetches without us having to plumb individual hooks.
+      // Guard the wrap so unit tests using a minimal Lucid stub (no static
+      // `query`) still boot — only real ORM models wire this path up.
+      const originalQuery = (this as any).query
+      if (typeof originalQuery === 'function') {
+        const bound = originalQuery.bind(this)
+        ;(this as any).query = function tenantScopedQuery(...args: any[]) {
+          const builder = bound(...args)
+          const id = requireScope('query')
+          if (id) builder.where(column, id)
+          return builder
+        }
+      }
 
       this.before('paginate', (queries: any) => {
         const id = requireScope('paginate')
