@@ -29,6 +29,8 @@ export {
   IsolationDriverRegistry,
   SchemaPgDriver,
   DatabasePgDriver,
+  RowScopePgDriver,
+  configuredScopeColumn,
 } from './isolation/index.js'
 export type {
   IsolationDriver,

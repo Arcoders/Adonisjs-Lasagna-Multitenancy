@@ -84,6 +84,18 @@ export interface IsolationConfig {
    * database (`<prefix><tenantId>`). Defaults to `tenant_`.
    */
   tenantDatabasePrefix?: string
+  /**
+   * For `rowscope-pg`: the names of tenant-scoped tables in the shared
+   * schema. Used by `destroy(tenant)` and `reset(tenant)` to issue
+   * `DELETE FROM <table> WHERE tenant_id = ?` per table. Tables not
+   * listed here are left untouched.
+   */
+  rowScopeTables?: string[]
+  /**
+   * For `rowscope-pg`: name of the column carrying the tenant id. Defaults
+   * to `tenant_id`.
+   */
+  rowScopeColumn?: string
 }
 
 export interface MultitenancyConfig {

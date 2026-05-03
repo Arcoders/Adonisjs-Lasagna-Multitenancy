@@ -11,6 +11,7 @@ import HookRegistry from '../services/hook_registry.js'
 import IsolationDriverRegistry from '../services/isolation/registry.js'
 import SchemaPgDriver from '../services/isolation/schema_pg_driver.js'
 import DatabasePgDriver from '../services/isolation/database_pg_driver.js'
+import RowScopePgDriver from '../services/isolation/rowscope_pg_driver.js'
 import TenantLogContext from '../services/tenant_log_context.js'
 import HealthService from '../health/health_service.js'
 import DoctorService from '../services/doctor/doctor_service.js'
@@ -73,7 +74,16 @@ export default class MultitenancyProvider {
         { activate: true }
       )
     }
-    // rowscope-pg lands in a subsequent commit.
+    if (choice === 'rowscope-pg' && !drivers.has('rowscope-pg')) {
+      drivers.register(
+        new RowScopePgDriver({
+          centralConnectionName: config.isolation?.templateConnectionName,
+          scopedTables: config.isolation?.rowScopeTables,
+          scopeColumn: config.isolation?.rowScopeColumn,
+        }),
+        { activate: true }
+      )
+    }
   }
 
   async start() {

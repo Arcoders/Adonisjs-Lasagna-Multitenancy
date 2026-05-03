@@ -51,6 +51,8 @@ export {
   IsolationDriverRegistry,
   SchemaPgDriver,
   DatabasePgDriver,
+  RowScopePgDriver,
+  configuredScopeColumn,
   cacheBootstrapper,
   createCacheBootstrapper,
   tenantCache,
@@ -119,4 +121,5 @@ export {
 export { resolveTenantId } from './extensions/request.js'
 export { setConfig, getConfig } from './config.js'
 export { tenancy } from './tenancy.js'
+export { withTenantScope, unscoped, isScopeBypassed } from './models/scoping.js'
 export { encrypt, decrypt, isEncrypted } from './utils/crypto.js'
