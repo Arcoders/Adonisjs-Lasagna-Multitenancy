@@ -336,6 +336,28 @@
       "filePath": "tenant_repl.js"
     },
     {
+      "commandName": "tenant:exec",
+      "description": "Run any ace command inside one or more tenant contexts",
+      "help": "Examples: node ace tenant:exec list:routes; node ace tenant:exec --tenant=abc make:migration users; node ace tenant:exec --status=active db:seed",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantsIds", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant ID(s) to target. Omit to iterate every tenant" },
+        { "name": "statuses", "flagName": "status", "required": false, "type": "array", "description": "Filter by status (active|provisioning|suspended|failed|deleted)" },
+        { "name": "includeDeleted", "flagName": "include-deleted", "required": false, "type": "boolean", "description": "Include soft-deleted tenants in the iteration" },
+        { "name": "limit", "flagName": "limit", "required": false, "type": "number", "description": "Stop after N tenants" },
+        { "name": "batchSize", "flagName": "batch-size", "required": false, "type": "number", "description": "Cursor batch size for whole-population iteration (default 100)" },
+        { "name": "continueOnError", "flagName": "continue-on-error", "required": false, "type": "boolean", "description": "Keep going when a tenant fails" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "Print which tenants would run without executing" }
+      ],
+      "args": [
+        { "name": "command", "argumentName": "command", "required": true, "description": "Ace command to run for each tenant", "type": "string" },
+        { "name": "commandArgs", "argumentName": "commandArgs", "required": false, "description": "Arguments and flags forwarded to the inner command", "type": "spread" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "tenant_exec.js"
+    },
+    {
       "commandName": "tenant:purge-expired",
       "description": "Drop schemas of soft-deleted tenants whose retention window has elapsed. Idempotent — safe to run from cron.",
       "help": "Suggested cron: 0 3 * * * node ace tenant:purge-expired --force",
