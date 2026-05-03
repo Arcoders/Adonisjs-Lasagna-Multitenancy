@@ -53,6 +53,7 @@ export {
   DatabasePgDriver,
   RowScopePgDriver,
   configuredScopeColumn,
+  getActiveDriver,
   cacheBootstrapper,
   createCacheBootstrapper,
   tenantCache,

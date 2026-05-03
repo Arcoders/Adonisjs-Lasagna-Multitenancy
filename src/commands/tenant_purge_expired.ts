@@ -5,6 +5,7 @@ import { getConfig } from '../config.js'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
 import HookRegistry from '../services/hook_registry.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 import TenantDeleted from '../events/tenant_deleted.js'
 import { isExpired, DEFAULT_SOFT_DELETE_RETENTION_DAYS } from '../utils/soft_delete.js'
 
@@ -76,13 +77,14 @@ export default class TenantPurgeExpired extends BaseCommand {
     }
 
     const hooks = await app.container.make(HookRegistry)
+    const driver = await getActiveDriver()
     let purged = 0
     let failed = 0
 
     for (const tenant of candidates) {
       try {
         await hooks.run('before', 'destroy', { tenant })
-        await tenant.uninstall()
+        await driver.destroy(tenant)
         await hooks.run('after', 'destroy', { tenant })
         await TenantDeleted.dispatch(tenant)
         this.logger.info(`  purged ${tenant.id}`)

@@ -4,6 +4,7 @@ import app from '@adonisjs/core/services/app'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract, TenantModelContract } from '../types/contracts.js'
 import HookRegistry from '../services/hook_registry.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 import TenantMigrated from '../events/tenant_migrated.js'
 
 export default class RunTenantMigrations extends BaseCommand {
@@ -44,18 +45,20 @@ export default class RunTenantMigrations extends BaseCommand {
     const tasks = this.ui.tasks({ verbose: this.verbose })
     const hooks = await app.container.make(HookRegistry)
 
+    const driver = await getActiveDriver()
+
     await tasks
       .add(`Migrating tenant "${tenant.name}": schema (${tenant.schemaName})`, async (task) => {
         try {
           task.update('Connecting to the tenant database')
-          tenant.getConnection()
+          await driver.connect(tenant)
 
           if (!this.dryRun) {
             await hooks.run('before', 'migrate', { tenant, direction: 'up' })
           }
 
           task.update('Running migrations')
-          await tenant.migrate({
+          await driver.migrate(tenant, {
             direction: 'up',
             disableLocks: this.disableLocks,
             dryRun: this.dryRun,

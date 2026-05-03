@@ -10,6 +10,7 @@ import InstallTenant from '../jobs/install_tenant.js'
 import TenantQueueService from '../services/tenant_queue_service.js'
 import DoctorService from '../services/doctor/doctor_service.js'
 import HookRegistry from '../services/hook_registry.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 import TenantCreated from '../events/tenant_created.js'
 import TenantActivated from '../events/tenant_activated.js'
 import TenantSuspended from '../events/tenant_suspended.js'
@@ -113,7 +114,10 @@ export default class AdminController {
     await tenant.save()
     await tenant.invalidateCache()
 
-    if (!keepSchema) await tenant.uninstall()
+    if (!keepSchema) {
+      const driver = await getActiveDriver()
+      await driver.destroy(tenant)
+    }
 
     await hooks.run('after', 'destroy', { tenant })
     await TenantDeleted.dispatch(tenant)

@@ -6,6 +6,7 @@ import logger from '@adonisjs/core/services/logger'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { getConfig } from '../config.js'
 import type { TenantModelContract } from '../types/contracts.js'
+import { getActiveDriver } from './isolation/active_driver.js'
 import { splitSqlStatementsTagged } from '../utils/sql_splitter.js'
 
 const isWin = process.platform === 'win32'
@@ -112,7 +113,8 @@ export default class SqlImportService {
       mode: 'transactional',
     }
 
-    const connection = tenant.getConnection()
+    const driver = await getActiveDriver()
+    const connection = await driver.connect(tenant)
 
     logger.info(
       { tenantId: tenant.id, schema: tenant.schemaName, total: tokens.length },

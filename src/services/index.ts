@@ -31,6 +31,7 @@ export {
   DatabasePgDriver,
   RowScopePgDriver,
   configuredScopeColumn,
+  getActiveDriver,
 } from './isolation/index.js'
 export type {
   IsolationDriver,

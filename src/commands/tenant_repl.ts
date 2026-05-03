@@ -10,6 +10,7 @@ import SsoService from '../services/sso_service.js'
 import MetricsService from '../services/metrics_service.js'
 import TenantQueueService from '../services/tenant_queue_service.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 import TenantLogContext from '../services/tenant_log_context.js'
 
 export default class TenantRepl extends BaseCommand {
@@ -34,7 +35,8 @@ export default class TenantRepl extends BaseCommand {
       return
     }
 
-    const db = tenant.getConnection()
+    const driver = await getActiveDriver()
+    const db = await driver.connect(tenant)
     const cb = await this.app.container.make(CircuitBreakerService)
     const logCtx = await this.app.container.make(TenantLogContext)
 

@@ -3,9 +3,11 @@ import app from '@adonisjs/core/services/app'
 import logger from '@adonisjs/core/services/logger'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
+import { DateTime } from 'luxon'
 import TenantQueueService from '../services/tenant_queue_service.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
 import HookRegistry from '../services/hook_registry.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 import TenantLogContext from '../services/tenant_log_context.js'
 import TenantDeleted from '../events/tenant_deleted.js'
 
@@ -28,7 +30,10 @@ export default class UninstallTenant extends Job<UninstallTenantPayload> {
       await new TenantQueueService().destroy(tenant.id)
       await new CircuitBreakerService().destroy(tenant.id)
 
-      await tenant.uninstall()
+      const driver = await getActiveDriver()
+      await driver.destroy(tenant)
+      tenant.deletedAt = DateTime.now()
+      await tenant.save()
       logger.info({ tenantId: tenant.id }, 'Tenant uninstalled successfully')
 
       await hooks.run('after', 'destroy', { tenant })

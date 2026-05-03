@@ -12,3 +12,4 @@ export {
   default as RowScopePgDriver,
   configuredScopeColumn,
 } from './rowscope_pg_driver.js'
+export { getActiveDriver } from './active_driver.js'
