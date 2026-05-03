@@ -43,6 +43,10 @@ export {
   ReadReplicaService,
   HookRegistry,
   BootstrapperRegistry,
+  cacheBootstrapper,
+  createCacheBootstrapper,
+  tenantCache,
+  CACHE_NAMESPACE_PREFIX,
   TenantLogContext,
   tenantLogger,
 } from './services/index.js'

@@ -25,6 +25,12 @@ export { default as ReadReplicaService } from './read_replica_service.js'
 export { default as HookRegistry } from './hook_registry.js'
 export { default as BootstrapperRegistry } from './bootstrapper_registry.js'
 export type { BootstrapperContext, TenantBootstrapper } from './bootstrapper_registry.js'
+export {
+  cacheBootstrapper,
+  createCacheBootstrapper,
+  tenantCache,
+  CACHE_NAMESPACE_PREFIX,
+} from './bootstrappers/index.js'
 export { DoctorService, builtInChecks } from './doctor/index.js'
 export type {
   DiagnosisSeverity,

@@ -5,6 +5,7 @@ import type { MultitenancyConfig } from '../types/config.js'
 import { BackofficeAdapter, TenantAdapter } from '../models/adapters/index.js'
 import { BackofficeBaseModel, TenantBaseModel, CentralBaseModel } from '../models/base/index.js'
 import BootstrapperRegistry from '../services/bootstrapper_registry.js'
+import cacheBootstrapper from '../services/bootstrappers/cache_bootstrapper.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
 import HookRegistry from '../services/hook_registry.js'
 import TenantLogContext from '../services/tenant_log_context.js'
@@ -45,6 +46,9 @@ export default class MultitenancyProvider {
 
     const hooks = await this.app.container.make(HookRegistry)
     hooks.loadDeclarative(config.hooks)
+
+    const bootstrappers = await this.app.container.make(BootstrapperRegistry)
+    if (!bootstrappers.has('cache')) bootstrappers.register(cacheBootstrapper)
   }
 
   async start() {
