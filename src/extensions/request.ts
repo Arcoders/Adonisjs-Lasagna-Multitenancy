@@ -7,6 +7,7 @@ import type {
 import MissingTenantHeaderException from '../exceptions/missing_tenant_header_exception.js'
 import TenantNotFoundException from '../exceptions/tenant_not_found_exception.js'
 import { getConfig } from '../config.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 import { HttpRequest } from '@adonisjs/core/http'
 import app from '@adonisjs/core/services/app'
 import assert from 'node:assert'
@@ -64,7 +65,8 @@ export function __setMemoizedTenant(request: HttpRequest, tenant: TenantModelCon
   const tenant = await repo.findById(tenantId, true)
   if (!tenant) throw new TenantNotFoundException()
 
-  tenant.getConnection()
+  const driver = await getActiveDriver()
+  await driver.connect(tenant)
   ;(this as any)[TENANT_MEMO_KEY] = tenant
   return tenant
 })

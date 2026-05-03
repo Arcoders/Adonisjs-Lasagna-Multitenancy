@@ -26,6 +26,21 @@ export { default as HookRegistry } from './hook_registry.js'
 export { default as BootstrapperRegistry } from './bootstrapper_registry.js'
 export type { BootstrapperContext, TenantBootstrapper } from './bootstrapper_registry.js'
 export {
+  IsolationDriverRegistry,
+  SchemaPgDriver,
+  DatabasePgDriver,
+  RowScopePgDriver,
+  configuredScopeColumn,
+  getActiveDriver,
+} from './isolation/index.js'
+export type {
+  IsolationDriver,
+  IsolationDriverName,
+  DestroyOptions,
+  MigrateOptions,
+  MigrateResult,
+} from './isolation/index.js'
+export {
   cacheBootstrapper,
   createCacheBootstrapper,
   tenantCache,

@@ -5,6 +5,7 @@ import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
 import TenantQueueService from '../services/tenant_queue_service.js'
 import HookRegistry from '../services/hook_registry.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 import TenantLogContext from '../services/tenant_log_context.js'
 import TenantProvisioned from '../events/tenant_provisioned.js'
 
@@ -24,7 +25,18 @@ export default class InstallTenant extends Job<InstallTenantPayload> {
       logger.info({ tenantId: tenant.id }, 'Provisioning tenant schema')
       await hooks.run('before', 'provision', { tenant })
 
-      await tenant.install()
+      const driver = await getActiveDriver()
+      try {
+        tenant.status = 'provisioning'
+        await tenant.save()
+        await driver.provision(tenant)
+        tenant.status = 'active'
+        await tenant.save()
+      } catch (error) {
+        tenant.status = 'failed'
+        await tenant.save()
+        throw error
+      }
       logger.info({ tenantId: tenant.id }, 'Tenant provisioned successfully')
 
       new TenantQueueService().getOrCreate(tenant.id)

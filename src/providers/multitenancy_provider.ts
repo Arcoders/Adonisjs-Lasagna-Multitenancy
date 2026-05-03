@@ -8,6 +8,10 @@ import BootstrapperRegistry from '../services/bootstrapper_registry.js'
 import cacheBootstrapper from '../services/bootstrappers/cache_bootstrapper.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
 import HookRegistry from '../services/hook_registry.js'
+import IsolationDriverRegistry from '../services/isolation/registry.js'
+import SchemaPgDriver from '../services/isolation/schema_pg_driver.js'
+import DatabasePgDriver from '../services/isolation/database_pg_driver.js'
+import RowScopePgDriver from '../services/isolation/rowscope_pg_driver.js'
 import TenantLogContext from '../services/tenant_log_context.js'
 import HealthService from '../health/health_service.js'
 import DoctorService from '../services/doctor/doctor_service.js'
@@ -20,6 +24,7 @@ export default class MultitenancyProvider {
 
   register() {
     this.app.container.singleton(BootstrapperRegistry, () => new BootstrapperRegistry())
+    this.app.container.singleton(IsolationDriverRegistry, () => new IsolationDriverRegistry())
     this.app.container.singleton(CircuitBreakerService, () => new CircuitBreakerService())
     this.app.container.singleton(HookRegistry, () => new HookRegistry())
     this.app.container.singleton(TenantLogContext, () => new TenantLogContext())
@@ -41,8 +46,41 @@ export default class MultitenancyProvider {
     CentralBaseModel.connection = config.centralConnectionName
 
     const db = await this.app.container.make(Database)
+    const drivers = await this.app.container.make(IsolationDriverRegistry)
+
+    // Register the configured isolation driver before wiring the adapter,
+    // because TenantAdapter consults the registry on every query.
+    const choice = config.isolation?.driver ?? 'schema-pg'
+    if (choice === 'schema-pg' && !drivers.has('schema-pg')) {
+      drivers.register(
+        new SchemaPgDriver({
+          templateConnectionName: config.isolation?.templateConnectionName,
+        }),
+        { activate: true }
+      )
+    }
+    if (choice === 'database-pg' && !drivers.has('database-pg')) {
+      drivers.register(
+        new DatabasePgDriver({
+          templateConnectionName: config.isolation?.templateConnectionName,
+          databasePrefix: config.isolation?.tenantDatabasePrefix,
+        }),
+        { activate: true }
+      )
+    }
+    if (choice === 'rowscope-pg' && !drivers.has('rowscope-pg')) {
+      drivers.register(
+        new RowScopePgDriver({
+          centralConnectionName: config.isolation?.templateConnectionName,
+          scopedTables: config.isolation?.rowScopeTables,
+          scopeColumn: config.isolation?.rowScopeColumn,
+        }),
+        { activate: true }
+      )
+    }
+
     BackofficeBaseModel.$adapter = new BackofficeAdapter(db)
-    TenantBaseModel.$adapter = new TenantAdapter(db)
+    TenantBaseModel.$adapter = new TenantAdapter(db, drivers)
 
     const hooks = await this.app.container.make(HookRegistry)
     hooks.loadDeclarative(config.hooks)
