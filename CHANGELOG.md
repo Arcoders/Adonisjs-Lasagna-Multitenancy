@@ -6,6 +6,103 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.0.0-beta.0] — 2026-05-03
+
+First v2 beta. Pluggable isolation drivers, hardened DDL paths, strict
+tenant scope by default. Migration guide at
+[docs/MIGRATING_V1_TO_V2.md](docs/MIGRATING_V1_TO_V2.md).
+
+### Added — Block A (foundations)
+
+- `TenantRepositoryContract.each(callback, opts)` — cursor-paginated iteration
+  for memory-safe walks across N tenants.
+- `BootstrapperRegistry` with `enter` / `leave` / `runScoped` lifecycle
+  primitives. `runScoped(ctx, fn)` unwinds partial-enter on failure and
+  always runs `leave` on `fn` throw.
+- `tenancy.run(tenant, fn)` / `tenancy.currentId()` / `tenancy.current()`
+  — canonical API for activating tenant context outside HTTP. Wraps
+  `TenantLogContext` (AsyncLocalStorage) and the bootstrapper registry.
+- `cacheBootstrapper` + `tenantCache()` helper — first concrete
+  bootstrapper. Per-tenant BentoCache namespaces with an injectable
+  factory for hermetic unit tests.
+
+### Added — Block B (driver system)
+
+- `IsolationDriver` interface — `provision` / `destroy` / `reset` /
+  `connect` / `disconnect` / `connectionName` / `migrate`.
+- `SchemaPgDriver` — current schema-per-tenant behavior, factored out of
+  the v1 inline logic.
+- `DatabasePgDriver` — database-per-tenant on PG. Idempotent provision,
+  `pg_terminate_backend` before `DROP DATABASE`. Requires `CREATEDB`.
+- `RowScopePgDriver` — shared schema with `tenant_id` column. Destroy is
+  `DELETE FROM <table> WHERE tenant_id = ?` per configured table; migrate
+  is a no-op.
+- `withTenantScope(BaseModel)` mixin — Lucid `before('find'|'fetch'|
+  'paginate'|'create'|'update'|'delete')` hooks inject `WHERE tenant_id`
+  from `tenancy.currentId()` and reject cross-tenant writes. Escape via
+  `unscoped(fn)`.
+- `IsolationDriverRegistry` — `register` / `use` / `active` / `get` /
+  `has` / `list` / `clear`. Provider seeds the active driver from
+  `config.isolation.driver`.
+- `tenant:migrate:fresh` ace command — DROP + recreate per-tenant storage
+  and re-run migrations. `--seed` runs `db:seed` after each tenant.
+
+### Added — security hardening
+
+- `assertSafeIdentifier()` — rejects anything that could escape a quoted
+  PG identifier (`"`, `;`, whitespace, shell metacharacters, length
+  > 63). Called at every driver entry that interpolates `tenant.id` into
+  DDL.
+- `MissingTenantScopeException` + strict scope mode (default) — querying
+  a `withTenantScope` model outside both `tenancy.run()` and
+  `unscoped()` now throws instead of silently returning every tenant's
+  rows. Opt-out via `isolation.rowScopeMode: 'allowGlobal'`.
+- Bulk `Model.query().delete()` / `.update()` are now scoped via the
+  `before('fetch')` hook (Lucid fires it for query-builder paths). v1's
+  silent cross-tenant wipe vector is closed.
+- `provider.shutdown()` invalidates module-level singleton caches in
+  `tenancy.ts` and `active_driver.ts` so test runners and hot-reload
+  paths can no longer hold references to dead containers.
+- `spawn('psql', …)` no longer uses `shell: true` on Windows. Eliminates
+  the cmd.exe metacharacter interpretation surface.
+
+### Changed (BREAKING)
+
+- `TenantAdapter` constructor now requires an `IsolationDriverRegistry`:
+  `new TenantAdapter(db, drivers)`. The bundled provider does this for
+  you; only custom providers need updating.
+- `IsolationDriver.connectionName(tenant)` → `connectionName(tenantId:
+  string)`. Synchronous callers (the adapter) only need the id.
+- `TenantModelContract` no longer declares `getConnection`,
+  `closeConnection`, `install`, `uninstall`, `migrate`,
+  `dropSchemaIfExists`, or `invalidateCache`. The active driver owns
+  these. Delete them from your tenant model.
+- `withTenantScope` defaults to **strict** scope. v1 silent-passthrough
+  is now `isolation.rowScopeMode: 'allowGlobal'`.
+- 14 internal call sites (commands, jobs, services, request macro, read
+  replicas, sql_import_service, clone_service) refactored to use
+  `getActiveDriver()` instead of tenant-model methods. No user-facing
+  change unless you wrapped these.
+- Lifecycle status transitions (`provisioning` / `active` / `failed` and
+  `deletedAt`) moved from the user's tenant model into the
+  `InstallTenant` / `UninstallTenant` jobs.
+- Node 24 required at runtime (the package's `engines` field already
+  said this; v2 surfaces dependency code paths that need it).
+
+### Migration
+
+See [docs/MIGRATING_V1_TO_V2.md](docs/MIGRATING_V1_TO_V2.md). For most
+apps: add `isolation: { driver: 'schema-pg' }` to the multitenancy
+config and delete the deprecated methods from the tenant model.
+
+### Tests
+
+- 334 unit tests passing on Node 24 (was 238 in v1).
+- New integration suites for `SchemaPgDriver`, `DatabasePgDriver`,
+  `RowScopePgDriver` + `withTenantScope` against real PG.
+
+---
+
 ## [1.0.5] — 2026-04-28
 
 ### Fixed
