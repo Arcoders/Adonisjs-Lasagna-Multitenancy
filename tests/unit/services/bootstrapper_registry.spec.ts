@@ -155,3 +155,59 @@ test.group('BootstrapperRegistry — error handling', () => {
     assert.deepEqual(log, ['leave:c', 'leave:b', 'leave:a'])
   })
 })
+
+test.group('BootstrapperRegistry — runScoped atomicity', () => {
+  test('runScoped runs enter, fn, then leave in correct order', async ({ assert }) => {
+    const reg = new BootstrapperRegistry()
+    const log: string[] = []
+    reg.register(makeBootstrapper('a', log))
+    reg.register(makeBootstrapper('b', log))
+
+    const result = await reg.runScoped(ctx(), () => {
+      log.push('fn')
+      return 42
+    })
+
+    assert.equal(result, 42)
+    assert.deepEqual(log, ['enter:a', 'enter:b', 'fn', 'leave:b', 'leave:a'])
+  })
+
+  test('runScoped runs leave even when fn throws', async ({ assert }) => {
+    const reg = new BootstrapperRegistry()
+    const log: string[] = []
+    reg.register(makeBootstrapper('a', log))
+    reg.register(makeBootstrapper('b', log))
+
+    await assert.rejects(
+      () =>
+        reg.runScoped(ctx(), () => {
+          log.push('fn')
+          throw new Error('boom')
+        }),
+      /boom/
+    )
+
+    assert.deepEqual(log, ['enter:a', 'enter:b', 'fn', 'leave:b', 'leave:a'])
+  })
+
+  test('runScoped unwinds partial enter on enter failure', async ({ assert }) => {
+    const reg = new BootstrapperRegistry()
+    const log: string[] = []
+    reg.register(makeBootstrapper('a', log))
+    reg.register(makeBootstrapper('b', log, { failEnter: true }))
+    reg.register(makeBootstrapper('c', log))
+
+    let fnCalled = false
+    await assert.rejects(
+      () =>
+        reg.runScoped(ctx(), () => {
+          fnCalled = true
+        }),
+      /enter:b:boom/
+    )
+
+    assert.isFalse(fnCalled)
+    // 'a' entered → leaves; 'b' threw before completion → no leave for b; 'c' never entered
+    assert.deepEqual(log, ['enter:a', 'enter:b', 'leave:a'])
+  })
+})

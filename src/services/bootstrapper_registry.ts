@@ -67,7 +67,31 @@ export default class BootstrapperRegistry {
   }
 
   async runLeave(ctx: BootstrapperContext): Promise<void> {
-    for (let i = this.#order.length - 1; i >= 0; i--) {
+    await this.#runLeaveUpTo(ctx, this.#order.length)
+  }
+
+  /**
+   * Run `enter` then `fn` then `leave` atomically. Guarantees that every
+   * bootstrapper whose `enter` succeeded gets its matching `leave`, even if
+   * `fn` throws or a later `enter` fails.
+   */
+  async runScoped<T>(ctx: BootstrapperContext, fn: () => T | Promise<T>): Promise<T> {
+    let completed = 0
+    try {
+      for (const name of this.#order) {
+        const b = this.#items.get(name)
+        if (!b) continue
+        await b.enter(ctx)
+        completed++
+      }
+      return await fn()
+    } finally {
+      await this.#runLeaveUpTo(ctx, completed)
+    }
+  }
+
+  async #runLeaveUpTo(ctx: BootstrapperContext, count: number): Promise<void> {
+    for (let i = Math.min(count, this.#order.length) - 1; i >= 0; i--) {
       const name = this.#order[i]
       const b = this.#items.get(name)
       if (!b?.leave) continue
