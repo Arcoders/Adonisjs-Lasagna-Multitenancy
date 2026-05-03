@@ -66,6 +66,21 @@ export interface ReadReplicasConfig {
   connectionSuffix?: string
 }
 
+export type IsolationDriverChoice = 'schema-pg' | 'database-pg' | 'rowscope-pg'
+
+export interface IsolationConfig {
+  /**
+   * Which isolation strategy to use. Defaults to `schema-pg` (the v1 default).
+   * `database-pg` and `rowscope-pg` will land in subsequent v2 milestones.
+   */
+  driver: IsolationDriverChoice
+  /**
+   * For `schema-pg` and `database-pg`: the Lucid connection name whose
+   * config is cloned to register tenant connections. Defaults to `'tenant'`.
+   */
+  templateConnectionName?: string
+}
+
 export interface MultitenancyConfig {
   backofficeSchemaName: string
   backofficeConnectionName: string
@@ -76,6 +91,11 @@ export interface MultitenancyConfig {
   resolverStrategy: TenantResolverStrategy
   tenantHeaderKey: string
   baseDomain: string
+  /**
+   * Optional isolation block. If omitted, the package falls back to
+   * `{ driver: 'schema-pg' }` to preserve v1 behavior.
+   */
+  isolation?: IsolationConfig
   schemaCacheTtl: number
   ignorePaths: string[]
   maintenanceSchedule: {

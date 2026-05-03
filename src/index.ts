@@ -1,4 +1,9 @@
-export type { MultitenancyConfig, TenantResolverStrategy } from './types/config.js'
+export type {
+  MultitenancyConfig,
+  TenantResolverStrategy,
+  IsolationConfig,
+  IsolationDriverChoice,
+} from './types/config.js'
 export { TENANT_REPOSITORY } from './types/contracts.js'
 export type {
   TenantModelContract,
@@ -43,6 +48,8 @@ export {
   ReadReplicaService,
   HookRegistry,
   BootstrapperRegistry,
+  IsolationDriverRegistry,
+  SchemaPgDriver,
   cacheBootstrapper,
   createCacheBootstrapper,
   tenantCache,
@@ -74,6 +81,11 @@ export type {
   DeclarativeHooks,
   BootstrapperContext,
   TenantBootstrapper,
+  IsolationDriver,
+  IsolationDriverName,
+  DestroyOptions,
+  MigrateOptions,
+  MigrateResult,
   TenantLogContextData,
   QuotaCheckResult,
   QuotaStateSnapshot,

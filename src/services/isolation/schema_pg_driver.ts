@@ -1,0 +1,138 @@
+import { getConfig } from '../../config.js'
+import type { TenantModelContract } from '../../types/contracts.js'
+import type {
+  DestroyOptions,
+  IsolationDriver,
+  IsolationDriverName,
+  MigrateOptions,
+  MigrateResult,
+} from './driver.js'
+
+const MAX_TENANT_CONNECTIONS = 50
+
+/**
+ * Lazily resolve `db` so unit tests that only exercise pure helpers
+ * (connectionName/schemaName) don't drag the Lucid runtime — and the
+ * `await app.booted(...)` inside `@adonisjs/lucid/services/db` — into
+ * the test process. Read replicas use the same pattern.
+ */
+async function lucid() {
+  const [{ default: db }, { default: app }, { MigrationRunner }] = await Promise.all([
+    import('@adonisjs/lucid/services/db'),
+    import('@adonisjs/core/services/app'),
+    import('@adonisjs/lucid/migration'),
+  ])
+  return { db, app, MigrationRunner }
+}
+
+/**
+ * Default isolation driver: each tenant gets its own PostgreSQL schema
+ * (`tenant_<uuid>`) on a shared database. Connections are registered
+ * lazily into Lucid's manager with a `searchPath` pointing at the
+ * tenant's schema. An LRU bound caps how many simultaneous tenant
+ * connections can stay open in the pool.
+ */
+export default class SchemaPgDriver implements IsolationDriver {
+  readonly name: IsolationDriverName = 'schema-pg'
+  readonly #lru = new Map<string, number>()
+  readonly #templateConnectionName: string
+
+  constructor(opts: { templateConnectionName?: string } = {}) {
+    this.#templateConnectionName = opts.templateConnectionName ?? 'tenant'
+  }
+
+  connectionName(tenant: TenantModelContract): string {
+    return `${getConfig().tenantConnectionNamePrefix}${tenant.id}`
+  }
+
+  schemaName(tenant: TenantModelContract): string {
+    return `${getConfig().tenantSchemaPrefix}${tenant.id}`
+  }
+
+  async provision(tenant: TenantModelContract): Promise<void> {
+    const { db } = await lucid()
+    await db.rawQuery(`CREATE SCHEMA IF NOT EXISTS "${this.schemaName(tenant)}"`)
+    await this.connect(tenant)
+  }
+
+  async destroy(tenant: TenantModelContract, opts: DestroyOptions = {}): Promise<void> {
+    await this.disconnect(tenant)
+    if (opts.keepData) return
+    const { db } = await lucid()
+    await db.rawQuery(`DROP SCHEMA IF EXISTS "${this.schemaName(tenant)}" CASCADE`)
+  }
+
+  async reset(tenant: TenantModelContract): Promise<void> {
+    await this.disconnect(tenant)
+    const { db } = await lucid()
+    await db.rawQuery(`DROP SCHEMA IF EXISTS "${this.schemaName(tenant)}" CASCADE`)
+    await db.rawQuery(`CREATE SCHEMA "${this.schemaName(tenant)}"`)
+    await this.connect(tenant)
+  }
+
+  async connect(tenant: TenantModelContract) {
+    const { db } = await lucid()
+    const name = this.connectionName(tenant)
+
+    if (db.manager.has(name)) {
+      this.#touch(name)
+      return db.connection(name)
+    }
+
+    const template = db.manager.get(this.#templateConnectionName)?.config
+    if (!template) {
+      throw new Error(
+        `SchemaPgDriver: template connection "${this.#templateConnectionName}" not found in db.manager. ` +
+          `Configure it in config/database.ts.`
+      )
+    }
+
+    db.manager.add(name, {
+      ...template,
+      searchPath: [this.schemaName(tenant)],
+    } as any)
+
+    this.#touch(name)
+    this.#evictIfNeeded(db)
+
+    return db.connection(name)
+  }
+
+  async disconnect(tenant: TenantModelContract): Promise<void> {
+    const { db } = await lucid()
+    const name = this.connectionName(tenant)
+    this.#lru.delete(name)
+    if (db.manager.has(name)) {
+      await db.manager.close(name)
+    }
+  }
+
+  async migrate(
+    tenant: TenantModelContract,
+    opts: MigrateOptions
+  ): Promise<MigrateResult> {
+    const { db, app, MigrationRunner } = await lucid()
+    const runner = new MigrationRunner(db, app, {
+      ...opts,
+      connectionName: this.connectionName(tenant),
+    })
+    await runner.run()
+    if (runner.error) throw runner.error
+    return {
+      executed: runner.migratedFiles ? Object.keys(runner.migratedFiles).length : 0,
+    }
+  }
+
+  #touch(name: string): void {
+    this.#lru.delete(name)
+    this.#lru.set(name, Date.now())
+  }
+
+  #evictIfNeeded(db: { manager: { close(name: string): Promise<void> } }): void {
+    if (this.#lru.size <= MAX_TENANT_CONNECTIONS) return
+    const oldest = this.#lru.keys().next().value
+    if (!oldest) return
+    this.#lru.delete(oldest)
+    db.manager.close(oldest).catch(() => {})
+  }
+}
