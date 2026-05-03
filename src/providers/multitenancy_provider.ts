@@ -4,6 +4,7 @@ import { setConfig } from '../config.js'
 import type { MultitenancyConfig } from '../types/config.js'
 import { BackofficeAdapter, TenantAdapter } from '../models/adapters/index.js'
 import { BackofficeBaseModel, TenantBaseModel, CentralBaseModel } from '../models/base/index.js'
+import BootstrapperRegistry from '../services/bootstrapper_registry.js'
 import CircuitBreakerService from '../services/circuit_breaker_service.js'
 import HookRegistry from '../services/hook_registry.js'
 import TenantLogContext from '../services/tenant_log_context.js'
@@ -17,6 +18,7 @@ export default class MultitenancyProvider {
   constructor(protected app: ApplicationService) {}
 
   register() {
+    this.app.container.singleton(BootstrapperRegistry, () => new BootstrapperRegistry())
     this.app.container.singleton(CircuitBreakerService, () => new CircuitBreakerService())
     this.app.container.singleton(HookRegistry, () => new HookRegistry())
     this.app.container.singleton(TenantLogContext, () => new TenantLogContext())

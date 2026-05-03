@@ -23,6 +23,8 @@ export { default as QuotaService } from './quota_service.js'
 export type { QuotaCheckResult, QuotaStateSnapshot, QuotaMode } from './quota_service.js'
 export { default as ReadReplicaService } from './read_replica_service.js'
 export { default as HookRegistry } from './hook_registry.js'
+export { default as BootstrapperRegistry } from './bootstrapper_registry.js'
+export type { BootstrapperContext, TenantBootstrapper } from './bootstrapper_registry.js'
 export { DoctorService, builtInChecks } from './doctor/index.js'
 export type {
   DiagnosisSeverity,

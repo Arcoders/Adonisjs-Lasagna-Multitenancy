@@ -42,6 +42,7 @@ export {
   QuotaService,
   ReadReplicaService,
   HookRegistry,
+  BootstrapperRegistry,
   TenantLogContext,
   tenantLogger,
 } from './services/index.js'
@@ -67,6 +68,8 @@ export type {
   TenantMigrateHookContext,
   HookContextByEvent,
   DeclarativeHooks,
+  BootstrapperContext,
+  TenantBootstrapper,
   TenantLogContextData,
   QuotaCheckResult,
   QuotaStateSnapshot,
