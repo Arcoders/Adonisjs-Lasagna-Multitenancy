@@ -326,7 +326,23 @@ test.group('SsoService — OIDC flow with fake IdP', (group) => {
       const cfg = (await svc.getConfig(t.id))!
 
       badIdp.setDiscoveryIssuer('https://attacker.example/')
-      await assert.rejects(() => svc.buildAuthUrl(cfg), /mismatched issuer/i)
+      // BentoCache's getOrSet wraps factory exceptions in a generic
+      // "Factory has thrown an error" — walk the cause chain to assert
+      // on the underlying message we throw from discover().
+      let caught: unknown = null
+      try {
+        await svc.buildAuthUrl(cfg)
+      } catch (e) {
+        caught = e
+      }
+      assert.isNotNull(caught, 'buildAuthUrl must reject on issuer mismatch')
+      const messages: string[] = []
+      let cur: any = caught
+      while (cur) {
+        if (typeof cur.message === 'string') messages.push(cur.message)
+        cur = cur.cause
+      }
+      assert.match(messages.join(' | '), /mismatched issuer/i)
     } finally {
       await badIdp.close()
     }
