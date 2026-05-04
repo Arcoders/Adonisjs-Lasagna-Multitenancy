@@ -2,7 +2,7 @@ import app from '@adonisjs/core/services/app'
 import type { HttpContext } from '@adonisjs/core/http'
 import SsoService from '../../services/sso_service.js'
 import TenantSsoConfig from '../../models/satellites/tenant_sso_config.js'
-import { loadTenantOr404, isNonEmptyString } from './helpers.js'
+import { loadTenantOr404, isNonEmptyString, validateExternalHttpsUrl } from './helpers.js'
 
 /**
  * Strips secret material before serializing. Admins can see whether a config
@@ -58,7 +58,12 @@ export default class SsoController {
     if (!isNonEmptyString(clientSecret)) {
       return ctx.response.badRequest({ error: 'clientSecret_required' })
     }
-    if (!isHttpsUrl(issuerUrl)) return ctx.response.badRequest({ error: 'issuerUrl_invalid' })
+    // issuerUrl is fetched server-side by SsoService (discovery + JWKS), so
+    // it MUST clear the SSRF guard: https only, no loopback / RFC 1918 /
+    // link-local / cloud-metadata hosts. redirectUri is only echoed to the
+    // IdP — the package never fetches it — so the loose http(s) check is OK.
+    const issuerErr = validateExternalHttpsUrl(issuerUrl)
+    if (issuerErr) return ctx.response.badRequest({ error: `issuerUrl_${issuerErr}` })
     if (!isHttpsUrl(redirectUri)) return ctx.response.badRequest({ error: 'redirectUri_invalid' })
     if (
       scopes !== undefined &&

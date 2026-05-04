@@ -36,6 +36,17 @@ jobs:
       - name: Test (unit)
         run: npm test
 
+      # Surfaces unused exports / orphaned files / unused deps. `--no-exit-code`
+      # so the report is informational; flip to required once the baseline
+      # is enforced.
+      - name: Knip (unused-code report)
+        run: npm run knip
+
+      # Production-only audit so we don't trip on devDependency-only CVEs that
+      # never ship to consumers. `high` level matches the publish-gate bar.
+      - name: npm audit (production deps)
+        run: npm run audit:prod
+
   test-integration:
     name: Integration Tests
     runs-on: ubuntu-latest

@@ -21,11 +21,18 @@ export default class AuditLogService {
     })
   }
 
-  async listForTenant(tenantId: string, page = 1, limit = 50) {
-    const paginator = await TenantAuditLog.query()
+  async listForTenant(
+    tenantId: string,
+    page = 1,
+    limit = 50,
+    range: { from?: Date; to?: Date } = {}
+  ) {
+    const q = TenantAuditLog.query()
       .where('tenant_id', tenantId)
       .orderBy('created_at', 'desc')
-      .paginate(page, Math.min(limit, 200))
+    if (range.from) q.where('created_at', '>=', range.from)
+    if (range.to) q.where('created_at', '<=', range.to)
+    const paginator = await q.paginate(page, Math.min(limit, 200))
     return paginator.serialize()
   }
 }
