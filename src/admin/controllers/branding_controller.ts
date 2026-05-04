@@ -31,9 +31,20 @@ function looksLikeUrl(value: unknown): value is string {
   }
 }
 
-function pickIfDefined<T>(input: any, key: string, validator?: (v: unknown) => boolean): T | undefined {
-  if (input[key] === undefined) return undefined
-  if (input[key] === null) return null as unknown as T
+/**
+ * Three-state pick:
+ *   - field absent (`undefined`) → return `undefined`, the caller skips it
+ *   - field set to `null` → return `null`, the caller clears the column
+ *   - field set to a value → run the validator; throw `invalid_<key>` on
+ *     failure so the controller can surface a 400 with a stable code
+ */
+function pickIfDefined<T>(
+  input: any,
+  key: string,
+  validator?: (v: unknown) => boolean
+): T | null | undefined {
+  if (input == null || input[key] === undefined) return undefined
+  if (input[key] === null) return null
   if (validator && !validator(input[key])) {
     throw new Error(`invalid_${key}`)
   }
@@ -58,14 +69,31 @@ export default class BrandingController {
     try {
       data = {
         fromName: pickIfDefined<string>(body, 'fromName', (v) => typeof v === 'string'),
-        fromEmail: pickIfDefined<string>(body, 'fromEmail', (v) => typeof v === 'string' && /@/.test(v)),
+        fromEmail: pickIfDefined<string>(
+          body,
+          'fromEmail',
+          (v) => typeof v === 'string' && /@/.test(v)
+        ),
         logoUrl: pickIfDefined<string>(body, 'logoUrl', looksLikeUrl),
-        primaryColor: pickIfDefined<string>(body, 'primaryColor', (v) => typeof v === 'string' && HEX_COLOR.test(v)),
+        primaryColor: pickIfDefined<string>(
+          body,
+          'primaryColor',
+          (v) => typeof v === 'string' && HEX_COLOR.test(v)
+        ),
         supportUrl: pickIfDefined<string>(body, 'supportUrl', looksLikeUrl),
-        emailFooter: pickIfDefined<Record<string, unknown>>(body, 'emailFooter', (v) => typeof v === 'object'),
+        emailFooter: pickIfDefined<Record<string, unknown>>(
+          body,
+          'emailFooter',
+          (v) => typeof v === 'object' && v !== null && !Array.isArray(v)
+        ),
       }
     } catch (err: any) {
-      return ctx.response.badRequest({ error: err.message })
+      // Stable error codes only — error message is `invalid_<key>` from
+      // pickIfDefined, never a raw exception string.
+      const code = typeof err?.message === 'string' && /^invalid_[a-zA-Z]+$/.test(err.message)
+        ? err.message
+        : 'invalid_branding_payload'
+      return ctx.response.badRequest({ error: code })
     }
 
     const svc = await app.container.make(BrandingService)

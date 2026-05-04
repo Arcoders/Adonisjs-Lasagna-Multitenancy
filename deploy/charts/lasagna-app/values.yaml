@@ -58,6 +58,40 @@ resources:
     cpu: 1000m
     memory: 768Mi
 
+# Pod-level security defaults. The container does not need root, raw
+# sockets, or a writable rootfs. `tmpfs` mounts cover the few writable
+# paths the runtime needs (Adonis tmp dir, npm cache).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+
+# Mount points the read-only rootfs needs as tmpfs. Override only if your
+# app writes elsewhere (and reconsider if it does).
+tmpfsMounts:
+  - name: tmp
+    mountPath: /tmp
+  - name: app-tmp
+    mountPath: /app/tmp
+
+# Optional NetworkPolicy. Disabled by default — most operators add their
+# own at the namespace level. When enabled, we deny all egress except
+# DNS, the configured database, and Redis.
+networkPolicy:
+  enabled: false
+  egressDatabasePort: 5432
+  egressRedisPort: 6379
+  ingressFromNamespaces: []  # NamespaceSelector matchLabels each entry
+
 # Probe paths must match what the app exposes. The package's default
 # health endpoints (mounted via @adonisjs-lasagna/multitenancy/health) are
 # /livez, /readyz, /healthz. Override below if your app mounts elsewhere.

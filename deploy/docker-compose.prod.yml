@@ -6,6 +6,12 @@
 #   APP_KEY, DB_USER, DB_PASSWORD, DB_NAME, REDIS_PASSWORD,
 #   POSTGRES_REPLICATION_PASSWORD
 #
+# IMAGE PINNING: the tags below (`postgres:16-alpine`, `redis:7-alpine`,
+# `nginx:1.27-alpine`) are mutable. For real production deploys, replace
+# them with `image@sha256:<digest>` so a rebuild upstream cannot ship
+# unexpected changes. You can find current digests via
+# `docker buildx imagetools inspect <image>:<tag>`.
+#
 # Bring up:   docker compose -f deploy/docker-compose.prod.yml --env-file .env up -d
 # Down:       docker compose -f deploy/docker-compose.prod.yml down -v
 services:

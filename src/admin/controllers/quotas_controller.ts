@@ -12,12 +12,19 @@ export default class QuotasController {
       const snapshot = await svc.snapshot(tenant)
       return ctx.response.ok({ data: snapshot })
     } catch (err: any) {
-      // Most common cause: `config.plans` not configured. Return a clean
-      // 503 instead of letting the exception bubble — the admin probably
-      // wants to see "quotas not enabled" rather than a stack trace.
+      // Most common cause: `config.plans` not configured. Translate the
+      // expected "plan not declared" exception to a stable 503 hint;
+      // anything else is logged server-side and surfaces as a generic
+      // 503 — we don't want stack traces or DB column names leaking
+      // into the admin response.
+      const isPlanConfigError =
+        typeof err?.message === 'string' && err.message.includes('not declared in config.plans.definitions')
+      ctx.logger?.warn?.({ err, tenantId: tenant.id }, 'quotas snapshot failed')
       return ctx.response.serviceUnavailable({
         error: 'quotas_unavailable',
-        message: err?.message ?? 'unknown',
+        ...(isPlanConfigError
+          ? { hint: 'configure `plans` in config/multitenancy.ts' }
+          : {}),
       })
     }
   }

@@ -9,6 +9,12 @@
 # Adjust the build command at the bottom of `builder` if your script name
 # differs (`node ace build` is the AdonisJS 7 default).
 
+# In production, pin to a digest instead of the floating tag below — tags
+# are mutable and an upstream rebuild can change what you ship without a
+# version bump. Override at build time:
+#   docker build --build-arg NODE_VERSION='node@sha256:<digest>' -f deploy/Dockerfile .
+# Find the current digest with `docker pull node:24-bookworm-slim && docker
+# image inspect --format='{{index .RepoDigests 0}}' node:24-bookworm-slim`.
 ARG NODE_VERSION=24-bookworm-slim
 
 # ---------------------------------------------------------------------------

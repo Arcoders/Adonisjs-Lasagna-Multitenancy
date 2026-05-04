@@ -14,18 +14,35 @@ export interface SwaggerOptions {
   title?: string
 }
 
-export function renderSwaggerHtml(specUrl: string, options: SwaggerOptions = {}): string {
-  const cdn = options.cdnBase ?? DEFAULT_CDN
-  const title = options.title ?? 'Lasagna Multitenancy Admin API'
-  // We HTML-escape `specUrl` defensively — the operator passes it but it
-  // ends up as a JS string literal too. A single `'`/`<` would be enough
-  // for trouble.
-  const safeSpec = specUrl
+function htmlEscape(value: string): string {
+  return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/'/g, '&#39;')
     .replace(/"/g, '&quot;')
+}
+
+/**
+ * `cdnBase` ends up as the `src` of `<script>`/`<link>` tags. Restrict it
+ * to absolute https URLs (or a path that starts with `/`) so an operator
+ * cannot accidentally — or maliciously — inject a `javascript:` URL into
+ * a docs HTML page that may be served over the admin auth gate.
+ */
+function safeCdnBase(value: string | undefined): string {
+  const v = value ?? DEFAULT_CDN
+  if (v.startsWith('/')) return v
+  if (/^https:\/\/[a-zA-Z0-9.-]+\//.test(v)) return v
+  return DEFAULT_CDN
+}
+
+export function renderSwaggerHtml(specUrl: string, options: SwaggerOptions = {}): string {
+  const cdn = htmlEscape(safeCdnBase(options.cdnBase))
+  const title = htmlEscape(options.title ?? 'Lasagna Multitenancy Admin API')
+  // `specUrl` ends up both in HTML attribute context and inside a JS
+  // string literal. HTML-escape covers both — single quotes become
+  // `&#39;` which JS parsers tolerate.
+  const safeSpec = htmlEscape(specUrl)
   return `<!doctype html>
 <html lang="en">
 <head>

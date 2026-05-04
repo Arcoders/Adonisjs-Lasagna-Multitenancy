@@ -57,9 +57,17 @@ const connectionPoolCheck: DoctorCheck = {
       const max = Number(pool.max ?? numUsed + numFree)
 
       // Tenant id (when applicable) for prettier messages and tenantId field.
-      const tenantId = name.startsWith(tenantPrefix)
+      // We only set it if the suffix really looks like a UUID — defense
+      // against a connection name that happens to share the prefix but
+      // isn't actually a tenant connection (orphan, custom adapter, etc.).
+      const candidate = name.startsWith(tenantPrefix)
         ? name.slice(tenantPrefix.length)
         : undefined
+      const tenantId =
+        candidate &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate)
+          ? candidate
+          : undefined
 
       if (max > 0 && numUsed / max >= warnRatio) {
         issues.push({

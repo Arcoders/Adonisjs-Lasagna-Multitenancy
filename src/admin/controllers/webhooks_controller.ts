@@ -3,7 +3,7 @@ import type { HttpContext } from '@adonisjs/core/http'
 import WebhookService from '../../services/webhook_service.js'
 import TenantWebhook from '../../models/satellites/tenant_webhook.js'
 import TenantWebhookDelivery from '../../models/satellites/tenant_webhook_delivery.js'
-import { loadTenantOr404, isNonEmptyString } from './helpers.js'
+import { loadTenantOr404, isNonEmptyString, validateExternalHttpsUrl } from './helpers.js'
 
 function serialize(w: TenantWebhook) {
   return {
@@ -50,9 +50,8 @@ export default class WebhooksController {
     const events = ctx.request.input('events')
     const secret = ctx.request.input('secret')
 
-    if (!isNonEmptyString(url)) {
-      return ctx.response.badRequest({ error: 'url_required' })
-    }
+    const urlError = validateExternalHttpsUrl(url)
+    if (urlError) return ctx.response.badRequest({ error: urlError })
     if (!Array.isArray(events) || events.length === 0 || !events.every(isNonEmptyString)) {
       return ctx.response.badRequest({ error: 'events_required_non_empty_array' })
     }
@@ -82,9 +81,8 @@ export default class WebhooksController {
     const enabled = ctx.request.input('enabled')
 
     if (url !== undefined) {
-      if (!isNonEmptyString(url)) {
-        return ctx.response.badRequest({ error: 'url_must_be_non_empty_string' })
-      }
+      const urlError = validateExternalHttpsUrl(url)
+      if (urlError) return ctx.response.badRequest({ error: urlError })
       hook.url = url
     }
     if (events !== undefined) {
@@ -140,7 +138,18 @@ export default class WebhooksController {
       return ctx.response.forbidden({ error: 'delivery_belongs_to_other_tenant' })
     }
 
-    // Reset attempt back to current and let the service deliver synchronously.
+    // Re-validate the stored URL before re-sending. A webhook URL that
+    // was acceptable at registration time could still be a SSRF vector
+    // today (e.g. DNS rebinding, or someone disabling validation in a
+    // prior version). Refuse instead of fetching.
+    const urlError = validateExternalHttpsUrl(delivery.webhook.url)
+    if (urlError) {
+      return ctx.response.unprocessableEntity({
+        error: 'webhook_url_unsafe',
+        code: urlError,
+      })
+    }
+
     const svc = await app.container.make(WebhookService)
     await svc.send(delivery.webhook, delivery)
     return ctx.response.ok({ data: serializeDelivery(delivery) })

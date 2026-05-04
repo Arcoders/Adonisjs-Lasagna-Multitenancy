@@ -105,11 +105,19 @@ const replicaLagCheck: DoctorCheck = {
           })
         }
       } catch (error: any) {
+        // We deliberately drop the raw error message — pg-driver errors
+        // can include credentials (`password=…`, full DSN) and we don't
+        // want those landing in `--json` doctor output, log shippers, or
+        // the /admin/multitenancy/health/report response.
+        const reasonCode =
+          typeof error?.code === 'string' && /^[A-Z0-9_]{1,32}$/.test(error.code)
+            ? error.code
+            : 'unknown'
         issues.push({
           code: 'replica_unreachable',
           severity: 'error',
-          message: `Could not probe replica "${label}": ${error?.message ?? 'unknown'}`,
-          meta: { host: label },
+          message: `Could not probe replica "${label}" (pg code: ${reasonCode})`,
+          meta: { host: label, pgCode: reasonCode },
         })
       } finally {
         // Close the probe connection so we don't leak idle sockets between runs.

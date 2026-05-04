@@ -48,10 +48,14 @@ export interface MultitenancyAdminRoutesOptions {
    */
   resolveAdminActor?: AdminActorResolver
   /**
-   * When `true`, the OpenAPI spec endpoint (`/openapi.json`) and Swagger UI
-   * (`/docs`) inherit `middleware`. Default `false` — docs are public so
-   * they're discoverable. The spec contains no secrets, but operators in
-   * regulated environments may still want to gate them.
+   * When `true` (default), the OpenAPI spec endpoint (`/openapi.json`)
+   * and Swagger UI (`/docs`) inherit `middleware`. The spec is a complete
+   * map of the admin surface (impersonation paths, destructive routes,
+   * SSO config) — leaving it public lets attackers enumerate the API
+   * without triggering auth failures, so we gate it by default.
+   *
+   * Pass `false` if you publish the spec intentionally (developer
+   * portal, internal Stoplight instance, etc.).
    */
   docsAuth?: boolean
 }
@@ -115,7 +119,7 @@ const DEFAULT_PREFIX = '/admin/multitenancy'
  *   POST   /tenants/:id/quotas/reset
  */
 export function multitenancyAdminRoutes(options: MultitenancyAdminRoutesOptions = {}): void {
-  const { prefix = DEFAULT_PREFIX, middleware, resolveAdminActor, docsAuth = false } = options
+  const { prefix = DEFAULT_PREFIX, middleware, resolveAdminActor, docsAuth = true } = options
 
   if (resolveAdminActor) {
     __setAdminActorResolver(resolveAdminActor)
