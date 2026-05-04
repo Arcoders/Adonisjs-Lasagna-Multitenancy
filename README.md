@@ -69,6 +69,7 @@ Two questions to ask before adopting:
   - [Testing helpers](#testing-helpers)
 - [Satellites](#satellites)
 - [Reference API at examples/api](#reference-api-at-examplesapi)
+- [Deployment](#deployment)
 - [Commands reference](#commands-reference)
 - [Background jobs](#background-jobs)
 - [Exceptions](#exceptions)
@@ -98,6 +99,19 @@ node ace configure @adonisjs-lasagna/multitenancy
 ```
 
 The configure command registers the provider in `adonisrc.ts`, publishes `config/multitenancy.ts`, and scaffolds `app/models/backoffice/tenant.ts`.
+
+By default it also publishes migration stubs for every satellite (audit, feature_flags, webhooks, branding, sso, metrics). Pick selectively with `--with`, or interactively when running with a TTY:
+
+```bash
+# Only audit logs and webhooks
+node ace configure @adonisjs-lasagna/multitenancy --with=audit,webhooks
+
+# Interactive (prompts for the satellites you want)
+node ace configure @adonisjs-lasagna/multitenancy
+
+# CI-friendly: explicit list, no prompt
+node ace configure @adonisjs-lasagna/multitenancy --no-interaction --with=audit,branding,feature_flags
+```
 
 ### 2. Set up your database connections
 
@@ -495,30 +509,67 @@ node ace tenant:doctor --check=schema_drift --check=migration_state
 node ace tenant:doctor --watch
 ```
 
-The eight built in checks: `failed_tenants`, `provisioning_stalled` (fixable), `schema_drift`, `migration_state`, `circuit_breakers` (fixable), `queue_health`, `backup_recency`, plus your own.
+Ten built in checks:
+
+| Check | Severity ceiling | What it watches |
+|---|---|---|
+| `failed_tenants` | error | Tenants stuck in `failed` |
+| `provisioning_stalled` (fixable) | warn | `provisioning` rows older than the install timeout |
+| `schema_drift` | error | Registry vs `information_schema.schemata` |
+| `migration_state` | error | `adonis_schema` rows in active tenants |
+| `circuit_breakers` (fixable) | warn | Open Opossum breakers |
+| `queue_health` | warn | Failed/delayed jobs **and stalled** active jobs |
+| `backup_recency` | warn | Tenants without a recent backup |
+| `replica_lag` | error | `pg_last_xact_replay_timestamp()` per replica |
+| `connection_pool` | error | Pool saturation + pending acquires |
+| `long_running_queries` | error | `pg_stat_activity` queries past threshold |
+
+Tunable thresholds live under `config/multitenancy.ts → doctor.*` (see `MultitenancyConfig.doctor` in `src/types/config.ts`).
 
 Real use case: before every prod deploy, `node ace tenant:doctor --json | jq '.summary'`. Block the deploy if any error severity issue exists.
 
-Plug in your own checks:
+#### Custom checks (plugin API)
+
+The `DoctorCheck` interface is part of the public surface. Register your own from a provider's `boot()`:
 
 ```ts
-import { DoctorService } from '@adonisjs-lasagna/multitenancy/services'
+// providers/observability_provider.ts
+import type DoctorService from '@adonisjs-lasagna/multitenancy/services'
+import type { DoctorCheck } from '@adonisjs-lasagna/multitenancy/services'
 
-DoctorService.register({
+const stripeDriftCheck: DoctorCheck = {
   name: 'stripe_subscription_drift',
-  description: 'Tenants whose Stripe subscription status disagrees with our DB',
+  description: 'Stripe subscription status vs DB row',
   async run({ tenants }) {
     const issues = []
     for (const t of tenants) {
-      const sub = await Stripe.subscriptions.retrieve(t.stripe_id)
-      if (sub.status !== t.subscription_status) {
-        issues.push({ tenantId: t.id, severity: 'warn', message: `${sub.status} != ${t.subscription_status}` })
+      const sub = await Stripe.subscriptions.retrieve(t.metadata.stripeId)
+      if (sub.status !== t.metadata.subscriptionStatus) {
+        issues.push({
+          code: 'stripe_subscription_mismatch',
+          severity: 'warn',
+          tenantId: t.id,
+          message: `${sub.status} != ${t.metadata.subscriptionStatus}`,
+          meta: { stripe: sub.status, db: t.metadata.subscriptionStatus },
+        })
       }
     }
     return issues
   },
-})
+}
+
+export default class ObservabilityProvider {
+  constructor(private app: ApplicationService) {}
+  async boot() {
+    const doctor = await this.app.container.make(
+      (await import('@adonisjs-lasagna/multitenancy/services')).default.DoctorService
+    )
+    doctor.register(stripeDriftCheck)
+  }
+}
 ```
+
+Once registered, the check shows up in `tenant:doctor --check=list`, runs in `tenant:doctor` and appears in the `/admin/multitenancy/health/report` endpoint. Fixable issues should set `fixable: true` and the check should accept `attemptFix` in `ctx`.
 
 ### Plans and quotas
 
@@ -708,7 +759,7 @@ The generic `TenantModelContract<TMeta extends object>` propagates through the r
 
 ### REST admin API
 
-Nine admin endpoints, one mount call. You bring your own auth.
+Full CRUD over tenants AND every satellite (audit logs, webhooks, feature flags, branding, SSO, metrics, quotas) — plus impersonation, maintenance toggles, queue stats, a fleet-wide doctor report, an OpenAPI 3.1 spec, and a Swagger UI. One mount call. You bring your own auth.
 
 ```ts
 // start/routes.ts
@@ -718,26 +769,59 @@ import { multitenancyAdminRoutes } from '@adonisjs-lasagna/multitenancy/admin'
 multitenancyAdminRoutes({
   prefix: '/admin/tenants',
   middleware: [authMiddleware],
+  // Optional: gate the docs endpoint behind the same auth.
+  docsAuth: false,
 })
 ```
 
-Endpoints exposed:
+Endpoints, grouped:
+
+**Tenants:**
 
 | Method | Path | Action |
 |---|---|---|
-| `GET` | `/` | List (filterable by `?status=` and `?includeDeleted=`) |
-| `GET` | `/:id` | Show |
-| `POST` | `/` | Create + dispatch `InstallTenant` |
-| `POST` | `/:id/activate` | Activate |
-| `POST` | `/:id/suspend` | Suspend |
-| `POST` | `/:id/destroy` | Destroy with optional `keepSchema` body field |
-| `POST` | `/:id/restore` | Restore from soft delete |
-| `GET` | `/:id/queue/stats` | BullMQ stats for this tenant |
-| `GET` | `/health/report` | Per fleet `DoctorService.run()` report |
+| `GET` / `POST` | `/tenants` | List / create |
+| `GET` | `/tenants/:id` | Show |
+| `POST` | `/tenants/:id/activate` `/suspend` `/destroy` `/restore` | Lifecycle |
+| `POST` / `DELETE` | `/tenants/:id/maintenance` | Enter / exit maintenance mode |
+| `GET` | `/tenants/:id/queue/stats` | BullMQ stats |
 
-Why opt in middleware? Nobody's auth model fits all cases. We hand you the routing, you decide whether it's session, JWT, mTLS, IP allowlist, or all four.
+**Impersonation:**
 
-Every endpoint plus the auth gate is verified in [tests/e2e/admin_full.spec.ts](examples/api/tests/e2e/admin_full.spec.ts).
+| Method | Path | Action |
+|---|---|---|
+| `POST` | `/tenants/:id/impersonations` | Issue session (requires `resolveAdminActor`) |
+| `DELETE` | `/impersonations/:token` | Revoke by token |
+| `DELETE` | `/impersonations/by-id/:sessionId` | Revoke by session id |
+
+**Satellites:**
+
+| Method | Path | Action |
+|---|---|---|
+| `GET` | `/tenants/:id/audit-logs` | Paginated audit log |
+| `GET` `POST` `PUT` `DELETE` | `/tenants/:id/webhooks[/:id]` | Webhook CRUD |
+| `GET` | `/tenants/:id/webhooks/:id/deliveries` | Delivery history |
+| `POST` | `/tenants/:id/webhooks/deliveries/:deliveryId/retry` | Manual retry |
+| `GET` `POST` `PUT` `DELETE` | `/tenants/:id/feature-flags[/:flag]` | Flag CRUD |
+| `GET` `PUT` | `/tenants/:id/branding` | Branding |
+| `GET` `PUT` | `/tenants/:id/sso` | SSO config (secret never returned) |
+| `POST` | `/tenants/:id/sso/disable` | Disable SSO |
+| `GET` | `/tenants/:id/metrics?days=30` | Daily metric rows |
+| `GET` `PUT` `POST` | `/tenants/:id/quotas[/usage\|/reset]` | Quota snapshot + manual usage |
+
+**Observability + docs:**
+
+| Method | Path | Action |
+|---|---|---|
+| `GET` | `/health/report` | Fleet-wide `DoctorService.run()` |
+| `GET` | `/openapi.json` | OpenAPI 3.1 spec for this API |
+| `GET` | `/docs` | Swagger UI (HTML, loads `swagger-ui-dist` from CDN) |
+
+Why opt in middleware? Nobody's auth model fits all cases. We hand you the routing, you decide whether it's session, JWT, mTLS, IP allowlist, or all four. The docs endpoints are public by default — pass `docsAuth: true` if you want them gated alongside the rest.
+
+Build a custom UI with the spec by pointing your `openapi-generator` / `orval` / `kubb` at `/openapi.json`. Schemas, request bodies, error shapes are all there.
+
+Every endpoint plus the auth gate is verified in [tests/integration/admin/satellites.spec.ts](tests/integration/admin/satellites.spec.ts) and [tests/e2e/admin_full.spec.ts](examples/api/tests/e2e/admin_full.spec.ts).
 
 ### Testing helpers
 
@@ -842,6 +926,16 @@ npm run test:e2e
 The script brings the stack up, runs `backoffice:setup`, executes the suite, and tears it back down. Pass `--keep` to inspect the data after a run. There's a PowerShell variant at `npm run test:e2e:win`.
 
 Tests skip gracefully when their prerequisites aren't there: backups skip if `pg_dump` isn't on PATH, mail tests skip if MailCatcher isn't reachable. CI installs both, so all 111 run.
+
+## Deployment
+
+Reference deploy artifacts live under [`deploy/`](deploy/):
+
+- [`deploy/Dockerfile`](deploy/Dockerfile) — multi-stage Node 24 image with `pg_dump` for the backup commands
+- [`deploy/docker-compose.prod.yml`](deploy/docker-compose.prod.yml) — Postgres primary + streaming replica + Redis + 3 app pods + nginx
+- [`deploy/charts/lasagna-app/`](deploy/charts/lasagna-app/) — Helm chart with Deployment, Service, Ingress (wildcard-aware), HPA, PDB, Secret
+
+The full guide with troubleshooting and env reference is at [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Commands reference
 

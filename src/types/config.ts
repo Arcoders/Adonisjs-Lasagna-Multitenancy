@@ -283,4 +283,22 @@ export interface MultitenancyConfig {
   }
   plans?: PlansConfig
   tenantReadReplicas?: ReadReplicasConfig
+  /**
+   * Optional thresholds for `tenant:doctor` checks. Each field overrides the
+   * built-in default. All durations are in seconds unless noted.
+   */
+  doctor?: {
+    /** Minutes a job can sit in `active` before `queue_stuck_check` flags it as stalled. Default 10. */
+    queueStalledMinutes?: number
+    /** Seconds of replica lag that warrant a `warn` from `replica_lag_check`. Default 30. */
+    replicaLagWarnSeconds?: number
+    /** Seconds of replica lag that warrant an `error` from `replica_lag_check`. Default 120. */
+    replicaLagErrorSeconds?: number
+    /** Seconds a query can stay in `pg_stat_activity.state='active'` before warn. Default 30. */
+    longQueryWarnSeconds?: number
+    /** Seconds before a long query escalates to error. Default 120. */
+    longQueryErrorSeconds?: number
+    /** Pool utilization (0-1) above which `connection_pool_check` warns. Default 0.9. */
+    poolSaturationWarnRatio?: number
+  }
 }
