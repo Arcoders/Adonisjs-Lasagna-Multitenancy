@@ -2,7 +2,9 @@ node_modules/
 build/
 .env
 *.log
-docs
 .claude
 CLAUDE.md
-cmultitenancy-packagetestsunitadmin
+cmultitenancy-packagetestsunitadmin
+# VitePress build output (the markdown under docs/ IS tracked)
+docs/.vitepress/cache/
+docs/.vitepress/dist/
