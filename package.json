@@ -113,7 +113,10 @@
     "test": "tsx bin/test.ts",
     "test:integration": "npm run build && tsx bin/test.integration.ts",
     "knip": "knip --no-exit-code",
-    "audit:prod": "npm audit --omit=dev --audit-level=high"
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "peerDependencies": {
     "@adonisjs/core": "^7.0.0",
@@ -177,6 +180,7 @@
     "prettier": "^3.4.2",
     "reflect-metadata": "^0.2.0",
     "tsx": "^4.19.0",
-    "typescript": "~5.7"
+    "typescript": "~5.7",
+    "vitepress": "^1.6.4"
   }
 }
