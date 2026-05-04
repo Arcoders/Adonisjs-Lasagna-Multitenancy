@@ -44,6 +44,12 @@ export default class ImpersonationService {
    * the package cache (BentoCache → Redis L2) with TTL = duration.
    */
   async start(opts: ImpersonationStartOptions): Promise<ImpersonationStartResult> {
+    // Validate the secret BEFORE we touch the cache or generate session
+    // data. Otherwise a misconfigured deploy leaves us hanging on Redis
+    // long enough for the request to time out — and it would be a real
+    // pain to debug from a 30-second timeout instead of a clear error.
+    this.#secret()
+
     if (!TARGET_USER_ID_RE.test(opts.targetUserId)) {
       throw new Error(
         `ImpersonationService: targetUserId "${opts.targetUserId}" does not match ` +
