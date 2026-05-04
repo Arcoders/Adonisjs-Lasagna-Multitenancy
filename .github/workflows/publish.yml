@@ -35,7 +35,21 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Prerelease versions (anything after a `-`, e.g. `2.0.0-beta.1`) are
+      # published under the `next` dist-tag so they NEVER override `latest`.
+      # Stable versions get the default `latest` tag.
+      - name: Resolve npm dist-tag
+        id: tag
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            echo "name=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Publishing $VERSION under dist-tag $(grep '^name=' $GITHUB_OUTPUT | tail -1 | cut -d= -f2)"
+
       - name: Publish to npm
-        run: npm publish --access public
+        run: npm publish --access public --tag ${{ steps.tag.outputs.name }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
