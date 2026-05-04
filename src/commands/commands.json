@@ -145,6 +145,23 @@
       "filePath": "tenant_migrate_rollback.js"
     },
     {
+      "commandName": "tenant:migrate:fresh",
+      "description": "Drop and recreate per-tenant storage, then re-run migrations. DESTRUCTIVE.",
+      "help": "Use --force to skip the confirmation prompt. Use --seed to run db:seed after migrations.",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantsIds", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant ID(s) to refresh. Omit to refresh every tenant" },
+        { "name": "force", "flagName": "force", "required": false, "type": "boolean", "alias": "y", "description": "Skip the confirmation prompt" },
+        { "name": "seed", "flagName": "seed", "required": false, "type": "boolean", "description": "Run seeders after migrations finish for each tenant" },
+        { "name": "disableLocks", "flagName": "disable-locks", "required": false, "type": "boolean", "description": "Disable migration locks" },
+        { "name": "verbose", "flagName": "verbose", "required": false, "type": "boolean", "description": "Verbose output" }
+      ],
+      "args": [],
+      "options": { "startApp": true },
+      "filePath": "tenant_migrate_fresh.js"
+    },
+    {
       "commandName": "tenant:queue:stats",
       "description": "Show BullMQ queue statistics for one or all tenant queues",
       "help": "",
@@ -317,6 +334,63 @@
       ],
       "options": { "startApp": true, "staysAlive": true },
       "filePath": "tenant_repl.js"
+    },
+    {
+      "commandName": "tenant:exec",
+      "description": "Run any ace command inside one or more tenant contexts",
+      "help": "Examples: node ace tenant:exec list:routes; node ace tenant:exec --tenant=abc make:migration users; node ace tenant:exec --status=active db:seed",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "tenantsIds", "flagName": "tenant", "required": false, "type": "array", "alias": "t", "description": "Tenant ID(s) to target. Omit to iterate every tenant" },
+        { "name": "statuses", "flagName": "status", "required": false, "type": "array", "description": "Filter by status (active|provisioning|suspended|failed|deleted)" },
+        { "name": "includeDeleted", "flagName": "include-deleted", "required": false, "type": "boolean", "description": "Include soft-deleted tenants in the iteration" },
+        { "name": "limit", "flagName": "limit", "required": false, "type": "number", "description": "Stop after N tenants" },
+        { "name": "batchSize", "flagName": "batch-size", "required": false, "type": "number", "description": "Cursor batch size for whole-population iteration (default 100)" },
+        { "name": "continueOnError", "flagName": "continue-on-error", "required": false, "type": "boolean", "description": "Keep going when a tenant fails" },
+        { "name": "dryRun", "flagName": "dry-run", "required": false, "type": "boolean", "description": "Print which tenants would run without executing" }
+      ],
+      "args": [
+        { "name": "command", "argumentName": "command", "required": true, "description": "Ace command to run for each tenant", "type": "string" },
+        { "name": "commandArgs", "argumentName": "commandArgs", "required": false, "description": "Arguments and flags forwarded to the inner command", "type": "spread" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "tenant_exec.js"
+    },
+    {
+      "commandName": "tenant:maintenance",
+      "description": "Toggle maintenance mode for a tenant (independent of suspended status)",
+      "help": "Examples: node ace tenant:maintenance <id> --message=\"Back at 18:00 UTC\"; node ace tenant:maintenance <id> --off",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "off", "flagName": "off", "required": false, "type": "boolean", "description": "Exit maintenance mode (default: enter)" },
+        { "name": "message", "flagName": "message", "required": false, "type": "string", "description": "Optional message shown in the 503 response" }
+      ],
+      "args": [
+        { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID to toggle", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "tenant_maintenance.js"
+    },
+    {
+      "commandName": "tenant:impersonate",
+      "description": "Issue an admin impersonation token for a target user inside a tenant",
+      "help": "Example: node ace tenant:impersonate <tenantId> <userId> --admin=admin-42 --duration=900 --reason=\"support ticket #1234\"",
+      "namespace": "tenant",
+      "aliases": [],
+      "flags": [
+        { "name": "admin", "flagName": "admin", "required": false, "type": "string", "description": "Acting admin id (recorded in the audit log)" },
+        { "name": "duration", "flagName": "duration", "required": false, "type": "number", "description": "Session duration in seconds (default 3600)" },
+        { "name": "reason", "flagName": "reason", "required": false, "type": "string", "description": "Optional reason recorded in audit trail" },
+        { "name": "path", "flagName": "path", "required": false, "type": "string", "description": "Path embedded in the printed redirect URL (default /)" }
+      ],
+      "args": [
+        { "name": "tenantId", "argumentName": "tenantId", "required": true, "description": "Tenant ID", "type": "string" },
+        { "name": "userId", "argumentName": "userId", "required": true, "description": "Target user ID inside the tenant", "type": "string" }
+      ],
+      "options": { "startApp": true },
+      "filePath": "tenant_impersonate.js"
     },
     {
       "commandName": "tenant:purge-expired",

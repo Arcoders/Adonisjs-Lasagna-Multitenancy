@@ -1,5 +1,4 @@
 import type { QueryClientContract } from '@adonisjs/lucid/types/database'
-import type { MigratorOptions } from '@adonisjs/lucid/types/migrator'
 import type { DateTime } from 'luxon'
 
 export const TENANT_REPOSITORY = Symbol('TENANT_REPOSITORY')
@@ -13,6 +12,15 @@ export type TenantStatus = 'provisioning' | 'active' | 'suspended' | 'failed' | 
  */
 export type TenantMetadata = Record<string, unknown>
 
+/**
+ * Contract every tenant model implementation must satisfy.
+ *
+ * v2 dropped `getConnection`/`closeConnection`/`install`/`uninstall`/
+ * `migrate`/`dropSchemaIfExists`/`invalidateCache` from this contract —
+ * those concerns now live on `IsolationDriver`. Implementations can keep
+ * those methods around for their own use, but the package never calls
+ * them.
+ */
 export interface TenantModelContract<TMeta extends object = TenantMetadata> {
   readonly id: string
   name: string
@@ -29,23 +37,38 @@ export interface TenantModelContract<TMeta extends object = TenantMetadata> {
   readonly isProvisioning: boolean
   readonly isFailed: boolean
   readonly isDeleted: boolean
-  getConnection(): QueryClientContract
+  /**
+   * Maintenance mode is independent of `status`. A tenant can be `active`
+   * AND in maintenance — useful for scheduled migrations, billing
+   * cutovers, etc., without flipping the lifecycle status.
+   *
+   * Implementations that don't expose this column should default
+   * `isMaintenance` to `false` and treat `enterMaintenance/exitMaintenance`
+   * as a no-op so older models keep working.
+   */
+  readonly isMaintenance?: boolean
+  maintenanceMessage?: string | null
+  enterMaintenance?(message?: string | null): Promise<void>
+  exitMaintenance?(): Promise<void>
   /**
    * Optional: when implemented, returns a Lucid client routed to a read
    * replica. Apps typically wire this up via `ReadReplicaService.resolve(this)`.
-   * Without read replicas configured, callers should fall back to
-   * `getConnection()`.
+   * Without read replicas configured, callers should fall back to the
+   * primary client returned by the active isolation driver.
    */
   getReadConnection?(): QueryClientContract | Promise<QueryClientContract>
-  closeConnection(): Promise<void>
-  migrate(options: Omit<MigratorOptions, 'connectionName'>): Promise<any>
-  install(): Promise<void>
-  uninstall(): Promise<void>
   suspend(): Promise<void>
   activate(): Promise<void>
-  invalidateCache(): Promise<void>
-  dropSchemaIfExists(): Promise<void>
   save(): Promise<TenantModelContract<TMeta>>
+}
+
+export interface EachOptions {
+  /** Page size for the cursor. Default: 100. */
+  batchSize?: number
+  /** Filter by status. Defaults to all statuses. */
+  statuses?: TenantStatus[]
+  /** Include soft-deleted tenants. Default: false. */
+  includeDeleted?: boolean
 }
 
 export interface TenantRepositoryContract<TMeta extends object = TenantMetadata> {
@@ -57,6 +80,15 @@ export interface TenantRepositoryContract<TMeta extends object = TenantMetadata>
     statuses?: TenantStatus[]
   }): Promise<TenantModelContract<TMeta>[]>
   whereIn(ids: string[], includeDeleted?: boolean): Promise<TenantModelContract<TMeta>[]>
+  /**
+   * Iterate over tenants in cursor-paginated batches. Memory-safe for large
+   * tenant counts. The callback runs sequentially per tenant; throw inside it
+   * to abort iteration.
+   */
+  each(
+    callback: (tenant: TenantModelContract<TMeta>) => Promise<void> | void,
+    options?: EachOptions
+  ): Promise<void>
   create(data: {
     name: string
     email: string

@@ -4,6 +4,7 @@ import app from '@adonisjs/core/services/app'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract } from '../types/contracts.js'
 import HookRegistry from '../services/hook_registry.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 import TenantDeleted from '../events/tenant_deleted.js'
 
 export default class DestroyTenant extends BaseCommand {
@@ -50,7 +51,6 @@ export default class DestroyTenant extends BaseCommand {
       const { DateTime } = await import('luxon')
       tenant.deletedAt = DateTime.now()
       await tenant.save()
-      await tenant.invalidateCache()
 
       if (this.keepSchema) {
         this.logger.info(
@@ -58,7 +58,8 @@ export default class DestroyTenant extends BaseCommand {
         )
       } else {
         this.logger.info(`Tenant "${tenant.name}" soft-deleted. Uninstalling schema...`)
-        await tenant.uninstall()
+        const driver = await getActiveDriver()
+        await driver.destroy(tenant)
       }
 
       await hooks.run('after', 'destroy', { tenant })

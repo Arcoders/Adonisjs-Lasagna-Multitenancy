@@ -1,30 +1,64 @@
-import { getConfig } from '../../config.js'
-import MissingTenantHeaderException from '../../exceptions/missing_tenant_header_exception.js'
-import { resolveTenantId } from '../../extensions/request.js'
-import DefaultLucidAdapter from './default_lucid_adapter.js'
 import { HttpContext } from '@adonisjs/core/http'
+import type { Database } from '@adonisjs/lucid/database'
 import type { LucidModel, ModelAdapterOptions } from '@adonisjs/lucid/types/model'
 import assert from 'node:assert'
+import MissingTenantHeaderException from '../../exceptions/missing_tenant_header_exception.js'
+import { resolveTenantId } from '../../extensions/request.js'
+import IsolationDriverRegistry from '../../services/isolation/registry.js'
+import { tenancy } from '../../tenancy.js'
+import DefaultLucidAdapter from './default_lucid_adapter.js'
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+/**
+ * Routes Lucid model queries to the right per-tenant connection by asking
+ * the active `IsolationDriver` for the connection name.
+ *
+ * Resolution order for the active tenant id:
+ *   1. Explicit `options.client` (already a connection)
+ *   2. Explicit `options.connection` or `modelConstructor.connection`
+ *   3. `tenancy.currentId()` — set by `tenancy.run(tenant, fn)` in queue
+ *      jobs, scripts, custom commands
+ *   4. The HTTP request resolver via `resolveTenantId(context.request)`
+ */
 export default class TenantAdapter extends DefaultLucidAdapter {
+  constructor(
+    db: Database,
+    private readonly drivers: IsolationDriverRegistry
+  ) {
+    super(db)
+  }
+
   override modelConstructorClient(modelConstructor: LucidModel, options?: ModelAdapterOptions) {
     if (options?.client) {
       return options.client
     }
 
-    let tenantConnectionName: string | undefined
-
-    const context = HttpContext.get()
-
-    if (context) {
-      const tenantId = resolveTenantId(context.request)
-      assert(tenantId && UUID_V4.test(tenantId), new MissingTenantHeaderException())
-      tenantConnectionName = getConfig().tenantConnectionNamePrefix + tenantId
+    const explicit = options?.connection || modelConstructor?.connection
+    if (explicit) {
+      return this.db.connection(explicit)
     }
 
-    const connection = options?.connection || modelConstructor?.connection || tenantConnectionName
-    return this.db.connection(connection)
+    const tenantId = this.#resolveTenantId()
+    const driver = this.drivers.active()
+    return this.db.connection(driver.connectionName(tenantId))
+  }
+
+  /**
+   * Pulls the active tenant id from `tenancy.run()` first, then from the
+   * HTTP request. Throws if neither yields a valid id.
+   */
+  #resolveTenantId(): string {
+    const fromTenancy = tenancy.currentId()
+    if (fromTenancy) return fromTenancy
+
+    const context = HttpContext.get()
+    if (!context) {
+      throw new MissingTenantHeaderException()
+    }
+
+    const tenantId = resolveTenantId(context.request)
+    assert(tenantId && UUID_V4.test(tenantId), new MissingTenantHeaderException())
+    return tenantId
   }
 }

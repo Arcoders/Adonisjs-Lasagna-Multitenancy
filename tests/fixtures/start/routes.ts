@@ -1,9 +1,14 @@
 import router from '@adonisjs/core/services/router'
 import { middleware } from './kernel.js'
+import { multitenancyAdminRoutes } from '@adonisjs-lasagna/multitenancy/admin'
 
 router.get('/health', async ({ response }) => {
   return response.ok({ status: 'ok' })
 })
+
+// Mount admin REST + OpenAPI docs without auth — the fixture is for tests
+// only, and individual specs supply their own ad-hoc gating where needed.
+multitenancyAdminRoutes({ prefix: '/admin/multitenancy' })
 
 router
   .group(() => {

@@ -4,6 +4,7 @@ import app from '@adonisjs/core/services/app'
 import { getConfig } from '../config.js'
 import { TENANT_REPOSITORY } from '../types/contracts.js'
 import type { TenantRepositoryContract, TenantModelContract } from '../types/contracts.js'
+import { getActiveDriver } from '../services/isolation/active_driver.js'
 
 export default class TenantSeed extends BaseCommand {
   static readonly commandName = 'tenant:seed'
@@ -63,7 +64,8 @@ export default class TenantSeed extends BaseCommand {
     const connName = `${getConfig().tenantConnectionNamePrefix}${tenant.id}`
 
     try {
-      tenant.getConnection()
+      const driver = await getActiveDriver()
+      await driver.connect(tenant)
     } catch (error: any) {
       this.logger.error(`Could not open connection for ${tenant.id}: ${error.message}`)
       return false

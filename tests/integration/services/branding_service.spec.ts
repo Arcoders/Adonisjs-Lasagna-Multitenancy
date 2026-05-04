@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
-import BrandingService from '../../../src/services/branding_service.js'
-import TenantBranding from '../../../src/models/satellites/tenant_branding.js'
+import { BrandingService } from '@adonisjs-lasagna/multitenancy/services'
+import { TenantBranding } from '@adonisjs-lasagna/multitenancy/models/satellites'
 import { createTestTenant, destroyTestTenant } from '../helpers/tenant.js'
 
 test.group('BrandingService (integration)', (group) => {

@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
-import FeatureFlagService from '../../../src/services/feature_flag_service.js'
-import TenantFeatureFlag from '../../../src/models/satellites/tenant_feature_flag.js'
+import { FeatureFlagService } from '@adonisjs-lasagna/multitenancy/services'
+import { TenantFeatureFlag } from '@adonisjs-lasagna/multitenancy/models/satellites'
 import { createTestTenant, destroyTestTenant } from '../helpers/tenant.js'
 
 test.group('FeatureFlagService (integration)', (group) => {

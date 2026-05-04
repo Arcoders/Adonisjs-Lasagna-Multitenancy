@@ -7,8 +7,122 @@ import type { Config } from '@japa/runner/types'
 
 export const plugins: Config['plugins'] = [assert(), apiClient(), pluginAdonisJS(app)]
 
+/**
+ * Create the schemas and tables the integration suite expects on a clean
+ * Postgres instance. CI spins up an empty `postgres:16-alpine` per job, so
+ * we can't rely on prior state — we provision exactly what the helpers in
+ * `tests/integration/helpers/tenant.ts` and the satellite-table services
+ * need (`backoffice.tenants` plus the satellite tables exercised by the
+ * branding/feature_flag/sso/metrics/webhook specs). Idempotent: running
+ * twice is a no-op.
+ */
+async function ensureBackofficeSchema(): Promise<void> {
+  const { default: db } = await import('@adonisjs/lucid/services/db')
+  await db.rawQuery('CREATE SCHEMA IF NOT EXISTS backoffice')
+  // pgcrypto powers `gen_random_uuid()` defaults below — install once into
+  // the public schema so every table that references it can resolve the
+  // function regardless of `search_path` ordering.
+  await db.rawQuery('CREATE EXTENSION IF NOT EXISTS pgcrypto')
+
+  // Mirror the canonical schemas defined under stubs/migrations/. Kept in
+  // sync with those stubs by hand — when stubs change, update here too.
+  const ddl = [
+    `CREATE TABLE IF NOT EXISTS backoffice.tenants (
+       id            uuid PRIMARY KEY,
+       name          varchar(255) NOT NULL,
+       email         varchar(255) NOT NULL,
+       status        varchar(255) NOT NULL,
+       custom_domain varchar(255),
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       updated_at    timestamptz NOT NULL DEFAULT now(),
+       deleted_at    timestamptz
+     )`,
+    `CREATE TABLE IF NOT EXISTS backoffice.tenant_brandings (
+       id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id      uuid NOT NULL UNIQUE,
+       from_name      varchar(255),
+       from_email     varchar(255),
+       logo_url       text,
+       primary_color  varchar(7),
+       support_url    text,
+       email_footer   jsonb,
+       created_at     timestamptz NOT NULL DEFAULT now(),
+       updated_at     timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE TABLE IF NOT EXISTS backoffice.tenant_feature_flags (
+       id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id   uuid NOT NULL,
+       flag        varchar(255) NOT NULL,
+       enabled     boolean NOT NULL DEFAULT false,
+       config      jsonb,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now(),
+       UNIQUE(tenant_id, flag)
+     )`,
+    `CREATE TABLE IF NOT EXISTS backoffice.tenant_webhooks (
+       id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id   uuid NOT NULL,
+       url         varchar(255) NOT NULL,
+       events      text[] NOT NULL DEFAULT '{}',
+       secret      text,
+       enabled     boolean NOT NULL DEFAULT true,
+       created_at  timestamptz NOT NULL DEFAULT now(),
+       updated_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE TABLE IF NOT EXISTS backoffice.tenant_webhook_deliveries (
+       id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       webhook_id    uuid NOT NULL REFERENCES backoffice.tenant_webhooks(id) ON DELETE CASCADE,
+       event         varchar(255) NOT NULL,
+       payload       jsonb NOT NULL,
+       status_code   integer,
+       response_body text,
+       attempt       integer NOT NULL DEFAULT 1,
+       status        varchar(20) NOT NULL DEFAULT 'pending',
+       next_retry_at timestamptz,
+       created_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE TABLE IF NOT EXISTS backoffice.tenant_sso_configs (
+       id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id     uuid NOT NULL UNIQUE,
+       provider      varchar(255) NOT NULL,
+       client_id     varchar(255) NOT NULL,
+       client_secret text NOT NULL,
+       issuer_url    text NOT NULL,
+       redirect_uri  text NOT NULL,
+       scopes        text[] NOT NULL DEFAULT '{}',
+       enabled       boolean NOT NULL DEFAULT true,
+       created_at    timestamptz NOT NULL DEFAULT now(),
+       updated_at    timestamptz NOT NULL DEFAULT now()
+     )`,
+    `CREATE TABLE IF NOT EXISTS backoffice.tenant_metrics (
+       id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id       uuid NOT NULL,
+       period          date NOT NULL,
+       request_count   bigint NOT NULL DEFAULT 0,
+       error_count     bigint NOT NULL DEFAULT 0,
+       bandwidth_bytes bigint NOT NULL DEFAULT 0,
+       created_at      timestamptz NOT NULL DEFAULT now(),
+       UNIQUE(tenant_id, period)
+     )`,
+    `CREATE TABLE IF NOT EXISTS backoffice.tenant_audit_logs (
+       id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+       tenant_id   uuid,
+       actor_type  varchar(255) NOT NULL,
+       actor_id    uuid,
+       action      varchar(255) NOT NULL,
+       metadata    jsonb,
+       ip_address  varchar(255),
+       created_at  timestamptz NOT NULL DEFAULT now()
+     )`,
+  ]
+
+  for (const stmt of ddl) {
+    await db.rawQuery(stmt)
+  }
+}
+
 export const runnerHooks: Required<Pick<Config, 'setup' | 'teardown'>> = {
-  setup: [],
+  setup: [ensureBackofficeSchema],
   teardown: [],
 }
 

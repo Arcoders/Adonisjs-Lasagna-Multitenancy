@@ -6,6 +6,7 @@ import logger from '@adonisjs/core/services/logger'
 import type { TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { getConfig } from '../config.js'
 import type { TenantModelContract } from '../types/contracts.js'
+import { getActiveDriver } from './isolation/active_driver.js'
 import { splitSqlStatementsTagged } from '../utils/sql_splitter.js'
 
 const isWin = process.platform === 'win32'
@@ -112,7 +113,8 @@ export default class SqlImportService {
       mode: 'transactional',
     }
 
-    const connection = tenant.getConnection()
+    const driver = await getActiveDriver()
+    const connection = await driver.connect(tenant)
 
     logger.info(
       { tenantId: tenant.id, schema: tenant.schemaName, total: tokens.length },
@@ -245,9 +247,20 @@ export default class SqlImportService {
     return result
   }
 
+  /**
+   * On Windows, `spawn('psql', …)` does NOT honor PATHEXT, so the binary
+   * has to be referenced as `psql.exe`. This avoids passing `shell: true`,
+   * which would let `&`, `|`, `;`, etc. inside any arg get interpreted by
+   * cmd.exe — a command-injection vector if any spawn arg ever contained
+   * untrusted data.
+   */
+  #psqlBinary(): string {
+    return isWin ? 'psql.exe' : 'psql'
+  }
+
   async #hasPsql(): Promise<boolean> {
     return await new Promise((resolve) => {
-      const proc = spawn('psql', ['--version'], { shell: isWin })
+      const proc = spawn(this.#psqlBinary(), ['--version'])
       proc.on('error', () => resolve(false))
       proc.on('exit', (code) => resolve(code === 0))
     })
@@ -266,7 +279,7 @@ export default class SqlImportService {
       const env = { ...process.env }
       if (cfg.password) env.PGPASSWORD = cfg.password
 
-      const proc = spawn('psql', args, { env, shell: isWin })
+      const proc = spawn(this.#psqlBinary(), args, { env })
       let stderr = ''
       proc.stderr.on('data', (chunk: Buffer) => {
         stderr += chunk.toString()

@@ -2,6 +2,7 @@ import db from '@adonisjs/lucid/services/db'
 import logger from '@adonisjs/core/services/logger'
 import type { QueryClientContract, TransactionClientContract } from '@adonisjs/lucid/types/database'
 import { getConfig } from '../config.js'
+import { getActiveDriver } from './isolation/active_driver.js'
 import type { TenantModelContract } from '../types/contracts.js'
 
 export interface CloneOptions {
@@ -26,13 +27,15 @@ export default class CloneService {
   ): Promise<CloneResult> {
     logger.info({ sourceId: source.id, destId: destination.id, options }, 'Starting tenant clone')
 
-    try {
-      await destination.install()
+    const driver = await getActiveDriver()
 
-      // `install()` creates the schema and the connection but doesn't run
+    try {
+      await driver.provision(destination)
+
+      // provision() creates the storage and the connection but doesn't run
       // tenant migrations. Run them now so the destination has the same DDL
       // as the source before we copy rows into it.
-      await destination.migrate({ direction: 'up' })
+      await driver.migrate(destination, { direction: 'up' })
 
       let tablesCopied = 0
       let rowsCopied = 0
@@ -43,15 +46,21 @@ export default class CloneService {
         rowsCopied = result.rowsCopied
       }
 
-      // The destination's pooled connection was opened during install() —
+      // The destination's pooled connection was opened during provision() —
       // BEFORE migrations created any tables and BEFORE the central
       // connection committed the row copy. PostgreSQL caches relation OIDs
       // and prepared statement plans per session, so leaving that pool
       // around can cause subsequent reads to see an empty (or missing)
-      // notes table even though the data is committed. Closing the
-      // connection forces the next getConnection() call to open a fresh
-      // session with a clean catalog view.
-      await destination.closeConnection().catch(() => {})
+      // table even though the data is committed. Disconnecting forces the
+      // next driver.connect() call to open a fresh session.
+      await driver.disconnect(destination).catch(() => {})
+
+      // Flip the destination to `active` once provisioning, migrations, and
+      // (optionally) the row copy have all succeeded. Pre-v2 this was
+      // implicit in `tenant.install()`; post-driver-system the package no
+      // longer touches the tenant row, so the caller owns the status.
+      destination.status = 'active'
+      await destination.save()
 
       logger.info(
         { sourceId: source.id, destId: destination.id, tablesCopied, rowsCopied },
@@ -59,15 +68,16 @@ export default class CloneService {
       )
 
       return { source, destination, tablesCopied, rowsCopied }
-    } catch (error) {
+    } catch (error: any) {
       destination.status = 'failed'
       await destination.save()
-      await destination.invalidateCache()
 
-      await destination.dropSchemaIfExists().catch((dropErr) => {
+      // Best-effort teardown of partial provisioning. `keepData: false` is
+      // the default — drops the schema/database created above.
+      await driver.destroy(destination).catch((dropErr: Error) => {
         logger.error(
           { destId: destination.id, err: dropErr.message },
-          'Failed to drop orphaned schema'
+          'Failed to drop orphaned destination storage'
         )
       })
 

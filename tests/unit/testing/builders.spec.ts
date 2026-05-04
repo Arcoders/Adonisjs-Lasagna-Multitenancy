@@ -53,11 +53,6 @@ test.group('buildTestTenant', (group) => {
     assert.equal(tenant.status, 'active')
   })
 
-  test('getConnection throws to make DB-touching paths obvious in tests', ({ assert }) => {
-    const tenant = buildTestTenant()
-    assert.throws(() => tenant.getConnection(), /buildTestTenant produces an in-memory fake/)
-  })
-
   test('isDeleted reflects deletedAt', ({ assert }) => {
     const tenant = buildTestTenant()
     assert.isFalse(tenant.isDeleted)

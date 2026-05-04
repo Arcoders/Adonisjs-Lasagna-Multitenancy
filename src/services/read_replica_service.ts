@@ -67,7 +67,7 @@ export default class ReadReplicaService {
   /**
    * Ensure a Lucid connection exists for the chosen replica and return it.
    * Returns `null` when no replicas are configured (caller should fall back
-   * to the primary `tenant.getConnection()`).
+   * to the primary connection from the active isolation driver).
    *
    * The connection is created on demand by cloning the primary tenant
    * connection's pg config, then overriding host/port/credentials with the
@@ -86,7 +86,9 @@ export default class ReadReplicaService {
 
     if (!db.manager.has(connName)) {
       // Ensure the primary tenant connection exists so we can clone its config.
-      tenant.getConnection()
+      const { getActiveDriver } = await import('./isolation/active_driver.js')
+      const driver = await getActiveDriver()
+      await driver.connect(tenant)
       const primaryName = `${getConfig().tenantConnectionNamePrefix}${tenant.id}`
       const primary = (db.manager as any).get?.(primaryName)?.config
         ?? (db as any).getRawConnection?.(primaryName)?.config
