@@ -1,6 +1,6 @@
 {
   "name": "@adonisjs-lasagna/multitenancy",
-  "version": "2.0.0-beta.1",
+  "version": "2.0.0-beta.2",
   "description": "Multi-tenancy for AdonisJS 7 with pluggable isolation drivers (schema/database/row-scoping), connection pooling, circuit breaking, queues, and satellite features",
   "type": "module",
   "license": "MIT",
