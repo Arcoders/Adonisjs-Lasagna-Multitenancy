@@ -349,7 +349,6 @@ const parameters = {
  * `/admin/multitenancy/tenants` keys.
  */
 export function getOpenAPISpec(prefix = '/admin/multitenancy'): OpenApiDocument {
-  // Normalize: never trailing slash, always leading slash.
   const p = prefix.replace(/\/$/, '') || ''
   const base = p === '' ? '' : p
 
@@ -493,7 +492,25 @@ export function getOpenAPISpec(prefix = '/admin/multitenancy'): OpenApiDocument 
     [`${base}/tenants/{id}/audit-logs`]: {
       get: {
         tags: [TAG_SATELLITES],
-        parameters: [paramRef('TenantId'), paramRef('Page'), paramRef('Limit')],
+        parameters: [
+          paramRef('TenantId'),
+          paramRef('Page'),
+          paramRef('Limit'),
+          {
+            name: 'from',
+            in: 'query',
+            description: 'ISO 8601 lower bound on `created_at` (inclusive).',
+            required: false,
+            schema: { type: 'string', format: 'date-time' },
+          },
+          {
+            name: 'to',
+            in: 'query',
+            description: 'ISO 8601 upper bound on `created_at` (inclusive).',
+            required: false,
+            schema: { type: 'string', format: 'date-time' },
+          },
+        ],
         responses: jsonResponse('OK', {
           type: 'object',
           properties: {

@@ -60,6 +60,7 @@ export default class MultitenancyProvider {
 
   async boot() {
     const config = this.app.config.get<MultitenancyConfig>('multitenancy')
+    this.#assertConfigShape(config)
     setConfig(config)
 
     BackofficeBaseModel.connection = config.backofficeConnectionName
@@ -124,6 +125,73 @@ export default class MultitenancyProvider {
     const bootstrappers = await this.app.container.make(BootstrapperRegistry)
     if (!bootstrappers.has('cache')) bootstrappers.register(cacheBootstrapper)
     await this.#registerOptionalBootstrappers(bootstrappers)
+
+    this.#validateImpersonationConfig(config)
+  }
+
+  /**
+   * Asserts the shape that the rest of the package treats as load-bearing.
+   * Cheaper than full schema validation, but catches the most common deploy
+   * mistakes (missing required field, typoed strategy) at boot rather than
+   * leaving them to surface as opaque "undefined" reads at request time.
+   */
+  #assertConfigShape(config: MultitenancyConfig | undefined): asserts config is MultitenancyConfig {
+    if (!config) {
+      throw new Error(
+        'multitenancy config is missing. Add `config/multitenancy.ts` exporting `defineConfig({...})` ' +
+          'and register `MultitenancyProvider` in `adonisrc.ts`.'
+      )
+    }
+
+    const required = [
+      'backofficeConnectionName',
+      'centralConnectionName',
+      'tenantConnectionNamePrefix',
+      'tenantSchemaPrefix',
+      'resolverStrategy',
+    ] as const
+    for (const key of required) {
+      if (!config[key]) {
+        throw new Error(`multitenancy.${key} is required but missing or empty.`)
+      }
+    }
+
+    const knownStrategies = [
+      'subdomain',
+      'header',
+      'path',
+      'domain-or-subdomain',
+      'request-data',
+    ]
+    if (!knownStrategies.includes(config.resolverStrategy)) {
+      throw new Error(
+        `multitenancy.resolverStrategy "${config.resolverStrategy}" is not one of ` +
+          `${knownStrategies.join(', ')}.`
+      )
+    }
+
+    if (config.resolverChain) {
+      if (!Array.isArray(config.resolverChain) || config.resolverChain.length === 0) {
+        throw new Error('multitenancy.resolverChain must be a non-empty array when set.')
+      }
+    }
+  }
+
+  /**
+   * If the host opted into impersonation by adding an `impersonation` block,
+   * the secret has to clear the same bar as ImpersonationService#secret().
+   * We check it here so a bad deploy fails on boot — not later, when the
+   * first admin tries to `start()` a session and the request stalls.
+   */
+  #validateImpersonationConfig(config: MultitenancyConfig): void {
+    if (!config.impersonation) return
+    const secret = config.impersonation.secret
+    if (!secret || secret.length < 32) {
+      throw new Error(
+        'multitenancy.impersonation.secret is missing or shorter than 32 characters. ' +
+          'Set it to a long random string (e.g. `openssl rand -hex 32`) before booting the app.'
+      )
+    }
   }
 
   /**

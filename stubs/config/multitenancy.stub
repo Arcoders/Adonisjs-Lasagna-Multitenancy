@@ -2,9 +2,10 @@
   exports({ to: app.configPath('multitenancy.ts') })
 }}}
 import env from '#start/env'
+import { defineConfig } from '@adonisjs-lasagna/multitenancy'
 import type { TenantResolverStrategy } from '@adonisjs-lasagna/multitenancy/types'
 
-export default {
+export default defineConfig({
   backofficeSchemaName: 'backoffice',
   backofficeConnectionName: 'backoffice',
   centralSchemaName: 'public',
@@ -75,4 +76,4 @@ export default {
       db: env.get('CACHE_REDIS_DB', 2),
     },
   },
-}
+})

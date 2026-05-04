@@ -50,10 +50,14 @@ export function validateExternalHttpsUrl(value: unknown): string | null {
     return 'url_invalid'
   }
   if (u.protocol !== 'https:') return 'url_must_be_https'
-  const host = u.hostname.toLowerCase()
+  // Node's URL parser keeps the brackets on IPv6 literal hostnames
+  // (`new URL('https://[::1]/').hostname === '[::1]'`), so strip them before
+  // comparing — otherwise `[::1]`, `[fc00::1]`, `[fe80::1]` slip through the
+  // IPv6 checks below as opaque hostnames and the SSRF guard is bypassed.
+  const rawHost = u.hostname.toLowerCase()
+  const host = rawHost.startsWith('[') && rawHost.endsWith(']') ? rawHost.slice(1, -1) : rawHost
   if (host === 'localhost' || host === '0.0.0.0') return 'url_blocks_loopback'
 
-  // IPv4 literal: split on dots, parse octets.
   const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
   if (v4) {
     const [, aS, bS, cS, dS] = v4
@@ -71,7 +75,6 @@ export function validateExternalHttpsUrl(value: unknown): string | null {
     if (a === 0) return 'url_blocks_reserved'
   }
 
-  // IPv6 literal: hostname is bracketed-stripped by URL parser.
   if (host.includes(':')) {
     if (host === '::1') return 'url_blocks_loopback'
     if (host.startsWith('fc') || host.startsWith('fd')) return 'url_blocks_private'

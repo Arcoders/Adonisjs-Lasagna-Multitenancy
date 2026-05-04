@@ -67,3 +67,50 @@ test.group('driveBootstrapper — enter rejects unsafe ids', (group) => {
     )
   })
 })
+
+test.group('driveBootstrapper — tenancy.run rejects traversal payloads end-to-end', (group) => {
+  group.each.teardown(() => __configureTenancyForTests({}))
+
+  const PAYLOADS = [
+    '../',
+    '..\\',
+    '../../etc/passwd',
+    '%2e%2e/',
+    'tenant_a/../tenant_b',
+    'a/b',
+    'a\\b',
+    'a;b',
+    'a"b',
+    'a b',
+    '',
+    'a'.repeat(64),
+  ]
+
+  for (const payload of PAYLOADS) {
+    test(`tenancy.run rejects tenant.id "${payload}" via the drive bootstrapper`, async ({
+      assert,
+    }) => {
+      const logCtx = new TenantLogContext()
+      const registry = new BootstrapperRegistry()
+      registry.register(createDriveBootstrapper())
+      __configureTenancyForTests({ logCtx, registry })
+
+      await assert.rejects(
+        () => tenancy.run(fakeTenant(payload), async () => 'reached'),
+        /Refusing to use unsafe/
+      )
+    })
+  }
+
+  test('tenantPrefix() inside a UUID-v4 scope returns the safe prefix', async ({ assert }) => {
+    const logCtx = new TenantLogContext()
+    const registry = new BootstrapperRegistry()
+    registry.register(createDriveBootstrapper())
+    __configureTenancyForTests({ logCtx, registry })
+
+    const id = '11111111-1111-4111-8111-111111111111'
+    await tenancy.run(fakeTenant(id), async () => {
+      assert.equal(tenantPrefix(), `tenants/${id}/`)
+    })
+  })
+})
